@@ -10,7 +10,12 @@
     "build": "npm install --only=production",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["plantas", "gestión", "api", "nodejs"],
+  "keywords": [
+    "plantas",
+    "gestión",
+    "api",
+    "nodejs"
+  ],
   "author": "Nicolas Ignacio Muñoz Nuñez",
   "license": "MIT",
   "engines": {
