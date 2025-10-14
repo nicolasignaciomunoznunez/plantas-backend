@@ -23,40 +23,67 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ========================
-// SECURITY MIDDLEWARES
+// CONFIGURACIÓN PRODUCCIÓN
+// ========================
+const isProduction = process.env.NODE_ENV === 'production';
+
+// ========================
+// SECURITY MIDDLEWARES - OPTIMIZADOS
 // ========================
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" }
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false // Puedes configurar esto más tarde
 }));
-app.use(compression());
+
+app.use(compression({
+  level: 6,
+  threshold: 100 * 1024 // Comprimir respuestas > 100KB
+}));
+
 app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// Rate limiting
+// ========================
+// RATE LIMITING - AJUSTADO PRODUCCIÓN
+// ========================
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 1000 // límite de 1000 requests por ventana
+  max: isProduction ? 500 : 1000, // Menos límite en producción
+  message: {
+    success: false,
+    message: 'Demasiadas solicitudes desde esta IP, intenta nuevamente en 15 minutos'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
 });
-app.use(limiter);
+app.use('/api/', limiter);
 
 // ========================
-// CORS CONFIGURATION
+// CORS CONFIGURATION - SIMPLIFICADA
 // ========================
-const allowedOrigins = [
-  'https://plantas-frontend.vercel.app',
-  'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
-  'https://plantas-frontend-pe5bmfn2i.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  process.env.FRONTEND_URL
-].filter(Boolean);
+const allowedOrigins = isProduction 
+  ? [
+      'https://plantas-frontend.vercel.app',
+      'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
+      'https://plantas-frontend-pe5bmfn2i.vercel.app',
+      process.env.FRONTEND_URL
+    ].filter(Boolean)
+  : [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:5174'
+    ];
 
 app.use(cors({
   origin: function (origin, callback) {
     // Permitir requests sin origin (mobile apps, postman, etc)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.some(allowedOrigin => 
+      origin === allowedOrigin || 
+      origin.startsWith(allowedOrigin.replace('https://', 'https://'))
+    )) {
       callback(null, true);
     } else {
       console.log('🚫 CORS bloqueado para origen:', origin);
@@ -64,9 +91,27 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With']
 }));
+
+// Preflight OPTIONS handling
+app.options('*', cors());
+
+// ========================
+// TRUST PROXY (IMPORTANTE PARA RAILWAY)
+// ========================
+app.set('trust proxy', 1);
+
+// ========================
+// REQUEST LOGGING
+// ========================
+app.use((req, res, next) => {
+  if (isProduction) {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - ${req.ip}`);
+  }
+  next();
+});
 
 // ========================
 // API ROUTES
@@ -80,35 +125,35 @@ app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 // ========================
-// HEALTH CHECK (OBLIGATORIO)
+// HEALTH CHECK MEJORADO
 // ========================
-app.get("/api/health", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "✅ API de Gestión de Plantas funcionando correctamente",
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development',
-    version: "1.0.0"
-  });
+app.get("/api/health", async (req, res) => {
+  try {
+    const dbStatus = await testConnection();
+    res.status(200).json({
+      success: true,
+      message: "✅ API de Gestión de Plantas funcionando correctamente",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      version: "1.0.0",
+      database: dbStatus ? "connected" : "disconnected",
+      uptime: process.uptime()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "❌ Health check failed",
+      database: "disconnected",
+      error: error.message
+    });
+  }
 });
 
-// Ruta de salud (mantener compatibilidad)
-app.get("/api/salud", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "✅ API de Gestión de Plantas funcionando correctamente",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0"
-  });
-});
-
 // ========================
-// ERROR HANDLING - VERSIÓN CORREGIDA
+// ERROR HANDLING MEJORADO
 // ========================
-
-// Manejo global de errores
 app.use((err, req, res, next) => {
-  console.error('❌ Error global:', err);
+  console.error('❌ Error global:', err.stack);
   
   // Error de CORS
   if (err.message === 'Not allowed by CORS') {
@@ -118,26 +163,47 @@ app.use((err, req, res, next) => {
     });
   }
   
-  res.status(500).json({
+  // Rate limit error
+  if (err.status === 429) {
+    return res.status(429).json({
+      success: false,
+      message: 'Demasiadas solicitudes'
+    });
+  }
+  
+  res.status(err.status || 500).json({
     success: false,
-    message: 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { error: err.message })
+    message: isProduction ? 'Error interno del servidor' : err.message,
+    ...(!isProduction && { stack: err.stack })
   });
 });
 
-// Manejo de rutas no encontradas (DESPUÉS de todas las rutas API)
-app.use((req, res) => {
-  if (req.path.startsWith('/api/')) {
+// 404 Handler - DEBE IR AL FINAL
+app.use('*', (req, res) => {
+  if (req.originalUrl.startsWith('/api/')) {
     res.status(404).json({
       success: false,
-      message: `Ruta API no encontrada: ${req.originalUrl}`
+      message: `Endpoint API no encontrado: ${req.originalUrl}`
     });
   } else {
     res.status(404).json({
       success: false,
-      message: `Ruta no encontrada: ${req.originalUrl}`
+      message: 'Ruta no encontrada'
     });
   }
+});
+
+// ========================
+// GRACEFUL SHUTDOWN
+// ========================
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM recibido, cerrando servidor gracefully...');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT recibido, cerrando servidor...');
+  process.exit(0);
 });
 
 // ========================
@@ -151,22 +217,20 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.log("==========================================");
     console.log("✅ Puerto:", PORT);
     console.log("🌍 Entorno:", process.env.NODE_ENV || "development");
-    console.log("🎯 Orígenes permitidos:", allowedOrigins);
+    console.log("🎯 Producción:", isProduction);
+    console.log("📊 Orígenes permitidos:", allowedOrigins);
     console.log("");
-    console.log("📊 Endpoints disponibles:");
-    console.log("   - /api/health");
-    console.log("   - /api/auth");
-    console.log("   - /api/plantas");
-    console.log("   - /api/datos-planta");
-    console.log("   - /api/incidencias");
-    console.log("   - /api/mantenimientos");
-    console.log("   - /api/reportes");
-    console.log("   - /api/dashboard");
+    console.log("🔗 Health Check: http://localhost:" + PORT + "/api/health");
     console.log("");
     console.log("🔐 Sistema de gestión de plantas listo para producción!");
     console.log("==========================================");
   } catch (error) {
     console.error("❌ Error crítico iniciando el servidor:", error);
+    console.log('🔧 VARIABLES DE ENTRADA BD:');
+console.log('DB_HOST:', process.env.DB_HOST ? '✅ Configurado' : '❌ Faltante');
+console.log('DB_USER:', process.env.DB_USER ? '✅ Configurado' : '❌ Faltante');
+console.log('DB_NAME:', process.env.DB_NAME ? '✅ Configurado' : '❌ Faltante');
+console.log('DB_PORT:', process.env.DB_PORT || '3306 (default)');
     process.exit(1);
   }
 });
