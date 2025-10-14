@@ -1,0 +1,35 @@
+{
+  "name": "plantas-backend",
+  "version": "1.0.0",
+  "description": "Backend para Sistema de Gestión de Plantas",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "build": "npm install --only=production",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["plantas", "gestión", "api", "nodejs"],
+  "author": "Nicolas Ignacio Muñoz Nuñez",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.15.1",
+    "pdfkit": "^0.17.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
