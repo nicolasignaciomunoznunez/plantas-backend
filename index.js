@@ -112,22 +112,18 @@ app.all("/api/*", (req, res) => {
 });
 
 // Manejo global de errores
-app.use((err, req, res, next) => {
-  console.error('❌ Error global:', err);
-  
-  // Error de CORS
-  if (err.message === 'Not allowed by CORS') {
-    return res.status(403).json({
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) {
+    res.status(404).json({
       success: false,
-      message: 'Origen no permitido por CORS'
+      message: `Ruta API no encontrada: ${req.originalUrl}`
+    });
+  } else {
+    res.status(404).json({
+      success: false,
+      message: `Ruta no encontrada: ${req.originalUrl}`
     });
   }
-  
-  res.status(500).json({
-    success: false,
-    message: 'Error interno del servidor',
-    ...(process.env.NODE_ENV === 'development' && { error: err.message })
-  });
 });
 
 // ========================
