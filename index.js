@@ -43,7 +43,9 @@ app.use(limiter);
 // CORS CONFIGURATION
 // ========================
 const allowedOrigins = [
-  'https://tu-frontend.vercel.app',
+  'https://plantas-frontend.vercel.app',
+  'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
+  'https://plantas-frontend-pe5bmfn2i.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
   process.env.FRONTEND_URL
@@ -101,17 +103,29 @@ app.get("/api/salud", (req, res) => {
 });
 
 // ========================
-// ERROR HANDLING
+// ERROR HANDLING - VERSIÓN CORREGIDA
 // ========================
-// Manejo de rutas no encontradas
-app.all("/api/*", (req, res) => {
-  res.status(404).json({
+
+// Manejo global de errores
+app.use((err, req, res, next) => {
+  console.error('❌ Error global:', err);
+  
+  // Error de CORS
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'Origen no permitido por CORS'
+    });
+  }
+  
+  res.status(500).json({
     success: false,
-    message: `Ruta API no encontrada: ${req.originalUrl}`
+    message: 'Error interno del servidor',
+    ...(process.env.NODE_ENV === 'development' && { error: err.message })
   });
 });
 
-// Manejo global de errores
+// Manejo de rutas no encontradas (DESPUÉS de todas las rutas API)
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) {
     res.status(404).json({
