@@ -1,13 +1,37 @@
 import bcryptjs from "bcryptjs";
 import crypto from "crypto";
 import { generarTokenYEstablecerCookie } from "../utils/generarTokenYEstablecerCookie.js";
+// COMENTAR TEMPORALMENTE las importaciones de email - USAREMOS NODEMAILER DESPUÉS
+/*
 import {
 	enviarCorreoRestablecimientoContraseña,
 	enviarCorreoContraseñaRestablecida,
 	enviarCorreoVerificacion,
 	enviarCorreoBienvenida,
 } from "../mailtrap/emails.js";
+*/
 import { Usuario } from "../models/usuarioModel.js";
+
+// FUNCIONES TEMPORALES VACÍAS - REEMPLAZAR CON NODEMAILER DESPUÉS
+const enviarCorreoRestablecimientoContraseña = async (email, url) => { 
+	console.log('📧 [EMAIL TEMPORAL] Restablecimiento contraseña para:', email, 'URL:', url);
+	return true;
+};
+
+const enviarCorreoContraseñaRestablecida = async (email) => { 
+	console.log('📧 [EMAIL TEMPORAL] Contraseña restablecida para:', email);
+	return true;
+};
+
+const enviarCorreoVerificacion = async (email, codigo) => { 
+	console.log('📧 [EMAIL TEMPORAL] Verificación email para:', email, 'Código:', codigo);
+	return true;
+};
+
+const enviarCorreoBienvenida = async (email, nombre) => { 
+	console.log('📧 [EMAIL TEMPORAL] Bienvenida para:', email, 'Nombre:', nombre);
+	return true;
+};
 
 export const registrar = async (req, res) => {
 	const { email, password, nombre, rol } = req.body;
@@ -42,7 +66,7 @@ export const registrar = async (req, res) => {
 
 		const token = generarTokenYEstablecerCookie(res, nuevoUsuario.id);
 
-		// Enviar email de verificación al usuario
+		// TEMPORAL: Email deshabilitado - solo log
 		await enviarCorreoVerificacion(nuevoUsuario.email, tokenVerificacion);
 
 		res.status(201).json({
@@ -93,6 +117,7 @@ export const verificarEmail = async (req, res) => {
 
         const usuarioActualizado = await Usuario.verificarUsuario(usuario.id);
 
+        // TEMPORAL: Email deshabilitado - solo log
         await enviarCorreoBienvenida(usuarioActualizado.email, usuarioActualizado.nombre);
 
         res.status(200).json({
@@ -103,10 +128,10 @@ export const verificarEmail = async (req, res) => {
                 email: usuarioActualizado.email,
                 nombre: usuarioActualizado.nombre,
                 rol: usuarioActualizado.rol,
-                estaVerificado: usuarioActualizado.isVerified, // ✅ Cambiar a estaVerificado
-                ultimoInicioSesion: usuarioActualizado.lastLogin, // ✅ Agregar este campo
-                creadoEn: usuarioActualizado.createdAt, // ✅ Cambiar a creadoEn
-                actualizadoEn: usuarioActualizado.updatedAt // ✅ Cambiar a actualizadoEn
+                estaVerificado: usuarioActualizado.isVerified,
+                ultimoInicioSesion: usuarioActualizado.lastLogin,
+                creadoEn: usuarioActualizado.createdAt,
+                actualizadoEn: usuarioActualizado.updatedAt
             },
         });
     } catch (error) {
@@ -221,6 +246,7 @@ export const olvideContraseña = async (req, res) => {
 
 		await Usuario.establecerTokenRestablecimiento(usuario.id, tokenRestablecimiento, tokenRestablecimientoExpira);
 
+		// TEMPORAL: Email deshabilitado - solo log
 		await enviarCorreoRestablecimientoContraseña(usuario.email, `${process.env.CLIENT_URL}/restablecer-contraseña/${tokenRestablecimiento}`);
 
 		res.status(200).json({ 
@@ -248,6 +274,7 @@ export const restablecerContraseña = async (req, res) => {
 
 		await Usuario.actualizarContraseña(usuario.id, contraseñaHasheada);
 
+		// TEMPORAL: Email deshabilitado - solo log
 		await enviarCorreoContraseñaRestablecida(usuario.email);
 
 		res.status(200).json({ success: true, message: "Contraseña restablecida exitosamente" });
@@ -289,14 +316,13 @@ export const verificarAutenticacion = async (req, res) => {
     });
   } catch (error) {
     console.log("Error en verificarAutenticacion:", error);
-    res.status(200).json({  // ✅ Cambiar a 200 para que el frontend pueda manejarlo
+    res.status(200).json({  
       success: false, 
       message: "Error de autenticación",
       usuario: null
     });
   }
 };
-
 
 export const obtenerPerfil = async (req, res) => {
   try {
@@ -308,7 +334,6 @@ export const obtenerPerfil = async (req, res) => {
       return res.status(404).json({ success: false, message: "Usuario no encontrado" });
     }
 
-    // ✅ USAR NOMBRES CONSISTENTES CON iniciarSesion
     res.status(200).json({
       success: true,
       usuario: {
@@ -316,10 +341,10 @@ export const obtenerPerfil = async (req, res) => {
         email: usuario.email,
         nombre: usuario.nombre,
         rol: usuario.rol,
-        estaVerificado: usuario.isVerified, // ✅ Cambiar a estaVerificado
-        ultimoInicioSesion: usuario.lastLogin,   // ✅ Cambiar a ultimoInicioSesion  
-        creadoEn: usuario.createdAt,   // ✅ Cambiar a creadoEn
-        actualizadoEn: usuario.updatedAt    // ✅ Cambiar a actualizadoEn
+        estaVerificado: usuario.isVerified,
+        ultimoInicioSesion: usuario.lastLogin,
+        creadoEn: usuario.createdAt,
+        actualizadoEn: usuario.updatedAt
       }
     });
   } catch (error) {
@@ -350,8 +375,6 @@ export const obtenerTodosLosUsuarios = async (req, res) => {
     }
 };
 
-
-// En tu authController.js - AGREGAR:
 export const actualizarPerfil = async (req, res) => {
   try {
     const { nombre, email } = req.body;
@@ -362,7 +385,6 @@ export const actualizarPerfil = async (req, res) => {
       email
     });
 
-    // ✅ USAR NOMBRES CONSISTENTES
     res.status(200).json({
       success: true,
       message: "Perfil actualizado correctamente",
@@ -392,7 +414,6 @@ export const cambiarContraseña = async (req, res) => {
       nuevaContraseña: nuevaContraseña ? '***' : 'FALTANTE'
     });
     
-    // ✅ VERIFICAR QUE LOS CAMPOS EXISTAN
     if (!contraseñaActual || !nuevaContraseña) {
       console.log('❌ [AUTH CONTROLLER] Campos faltantes');
       return res.status(400).json({ 
