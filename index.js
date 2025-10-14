@@ -104,10 +104,10 @@ app.get("/api/salud", (req, res) => {
 // ERROR HANDLING
 // ========================
 // Manejo de rutas no encontradas
-app.use("/api/*", (req, res) => {
+app.all("/api/*", (req, res) => {
   res.status(404).json({
     success: false,
-    message: `Ruta no encontrada: ${req.originalUrl}`
+    message: `Ruta API no encontrada: ${req.originalUrl}`
   });
 });
 
