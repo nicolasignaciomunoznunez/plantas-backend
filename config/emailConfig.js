@@ -1,12 +1,14 @@
-// config/emailConfig.js - VERSIÓN SIMPLIFICADA
+// config/emailConfig.js
 import { SendGridService } from '../services/sendgridService.js';
 
-// Solo para mantener la compatibilidad con tu código existente
+// Exportar para compatibilidad
+export const EmailService = SendGridService;
+export default SendGridService;
+
 export const verifyEmailConnection = async () => {
   try {
     console.log('📧 Probando conexión con SendGrid API...');
     
-    // Test simple
     const testResult = await SendGridService.sendVerificationEmail(
       process.env.EMAIL_FROM_ADDRESS,
       '000000',
@@ -25,7 +27,3 @@ export const verifyEmailConnection = async () => {
     return false;
   }
 };
-
-// Exportar el servicio para uso directo (mantener compatibilidad)
-export { SendGridService as EmailService };
-export default SendGridService;
