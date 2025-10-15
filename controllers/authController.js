@@ -1,7 +1,7 @@
 import bcryptjs from "bcryptjs";
 import crypto from "crypto";
 import { generarTokenYEstablecerCookie } from "../utils/generarTokenYEstablecerCookie.js";
-import { EmailService } from "../services/sendgridService.js";
+import { SendGridService } from "../services/sendgridService.js";
 import { Usuario } from "../models/usuarioModel.js";
 
 export const registrar = async (req, res) => {
@@ -49,7 +49,7 @@ export const registrar = async (req, res) => {
     const token = generarTokenYEstablecerCookie(res, nuevoUsuario.id);
 
     // Enviar email de verificación
-    const emailResult = await EmailService.sendVerificationEmail(
+    const emailResult = await SendGridService.sendVerificationEmail(
       nuevoUsuario.email, 
       tokenVerificacion, 
       nuevoUsuario.nombre
@@ -108,7 +108,7 @@ export const verificarEmail = async (req, res) => {
     const usuarioActualizado = await Usuario.verificarUsuario(usuario.id);
 
     // Enviar email de bienvenida
-    await EmailService.sendWelcomeEmail(usuarioActualizado.email, usuarioActualizado.nombre);
+    await SendGridService.sendWelcomeEmail(usuarioActualizado.email, usuarioActualizado.nombre);
 
     res.status(200).json({
       success: true,
@@ -227,7 +227,7 @@ export const olvideContraseña = async (req, res) => {
     await Usuario.establecerTokenRestablecimiento(usuario.id, tokenRestablecimiento, tokenRestablecimientoExpira);
 
     // Enviar email de restablecimiento
-    await EmailService.sendPasswordResetEmail(usuario.email, tokenRestablecimiento, usuario.nombre);
+    await SendGridService.sendPasswordResetEmail(usuario.email, tokenRestablecimiento, usuario.nombre);
 
     res.status(200).json({ 
       success: true, 
@@ -267,7 +267,7 @@ export const restablecerContraseña = async (req, res) => {
     await Usuario.actualizarContraseña(usuario.id, contraseñaHasheada);
 
     // Enviar confirmación
-    await EmailService.sendPasswordResetConfirmation(usuario.email, usuario.nombre);
+    await SendGridService.sendPasswordResetConfirmation(usuario.email, usuario.nombre);
 
     res.status(200).json({ 
       success: true, 
