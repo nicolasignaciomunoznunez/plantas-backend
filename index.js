@@ -55,6 +55,49 @@ app.use("/api/incidencias", incidenciaRoutes);
 app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.post("/api/test-sendgrid", async (req, res) => {
+  try {
+    console.log('🧪 TEST SENDGRID - Iniciando...');
+    
+    // Importar dinámicamente para evitar ciclos
+    const { EmailService } = await import('./services/emailService.js');
+    
+    console.log('🧪 Configuración actual:');
+    console.log('   EMAIL_SERVICE:', process.env.EMAIL_SERVICE);
+    console.log('   EMAIL_USER:', process.env.EMAIL_USER);
+    console.log('   EMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? '✅ Configurada' : '❌ Faltante');
+    console.log('   EMAIL_FROM_ADDRESS:', process.env.EMAIL_FROM_ADDRESS);
+    
+    // Test simple de email
+    const result = await EmailService.sendVerificationEmail(
+      process.env.EMAIL_FROM_ADDRESS, // Enviar a ti mismo
+      '999999', 
+      'Test User'
+    );
+    
+    console.log('🧪 Resultado del test:', result);
+    
+    res.json({
+      success: result.success,
+      message: result.success ? '✅ Email enviado correctamente' : '❌ Error enviando email',
+      result: result,
+      config: {
+        emailService: process.env.EMAIL_SERVICE,
+        emailUser: process.env.EMAIL_USER,
+        emailFrom: process.env.EMAIL_FROM_ADDRESS,
+        apiKeyLength: process.env.EMAIL_APP_PASSWORD ? process.env.EMAIL_APP_PASSWORD.length : 0
+      }
+    });
+    
+  } catch (error) {
+    console.error('🧪 ERROR en test:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
+    });
+  }
+});
 
 // ✅ AGREGAR RUTA DE TEST EMAIL TEMPORAL
 app.post("/api/test-email", async (req, res) => {

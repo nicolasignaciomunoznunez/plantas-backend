@@ -1,24 +1,35 @@
-// config/emailConfig.js - VERSIÓN CORRECTA PARA RAILWAY
 import nodemailer from 'nodemailer';
 
-// Configuración probada y funcionando - SIN dotenv
+// Configuración para SendGrid
 export const transporter = nodemailer.createTransport({
-  service: 'gmail',
+  host: 'smtp.sendgrid.net',
+  port: 587,
   auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_APP_PASSWORD
-  }
+    user: 'apikey', // ← EXACTAMENTE 'apikey' (texto fijo)
+    pass: process.env.EMAIL_APP_PASSWORD // ← Tu API Key que empieza con SG.
+  },
+  // Configuración para mejor rendimiento
+  connectionTimeout: 10000,
+  socketTimeout: 10000,
+  secure: false // ← Usar TLS (puerto 587)
 });
 
 export const verifyEmailConnection = async () => {
   try {
     await transporter.verify();
-    console.log('✅ CONEXIÓN GMAIL ESTABLECIDA EN RAILWAY');
-    console.log('   Servicio: Gmail');
-    console.log('   Cuenta:', process.env.EMAIL_USER);
+    console.log('✅ CONEXIÓN SENDGRID ESTABLECIDA');
+    console.log('   Servicio: SendGrid');
+    console.log('   Host: smtp.sendgrid.net');
+    console.log('   Estado: Listo para enviar emails');
     return true;
   } catch (error) {
-    console.error('❌ ERROR CONEXIÓN GMAIL:', error.message);
+    console.error('❌ ERROR CONEXIÓN SENDGRID:');
+    console.error('   Mensaje:', error.message);
+    console.error('   Código:', error.code);
+    console.error('   Verifica:');
+    console.error('     1. API Key en Railway: SG.xxx...');
+    console.error('     2. EMAIL_USER=apikey en Railway');
+    console.error('     3. Sender verificado en SendGrid');
     return false;
   }
 };
