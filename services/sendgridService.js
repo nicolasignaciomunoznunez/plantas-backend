@@ -1,80 +1,232 @@
-// services/sendgridService.js - VERSIÓN CON DIAGNÓSTICO
+// services/sendgridService.js - VERSIÓN FINAL CON TUS PLANTILLAS
 import sgMail from '@sendgrid/mail';
 
-// Debug completo de variables
-console.log('🔧 [SENDGRID DEBUG] Variables de entorno:');
-console.log('   EMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? `✅ (${process.env.EMAIL_APP_PASSWORD.length} chars)` : '❌ UNDEFINED');
-console.log('   EMAIL_FROM_ADDRESS:', process.env.EMAIL_FROM_ADDRESS || '❌ UNDEFINED');
-console.log('   EMAIL_FROM_NAME:', process.env.EMAIL_FROM_NAME || '❌ UNDEFINED');
-
-// Configurar solo si existe
+// Configurar API Key con variables de entorno
 if (process.env.EMAIL_APP_PASSWORD) {
   sgMail.setApiKey(process.env.EMAIL_APP_PASSWORD);
-  console.log('✅ SENDGRID: API Key configurada');
+  console.log('✅ SENDGRID: API Key configurada desde variables de entorno');
 } else {
-  console.error('❌ SENDGRID: EMAIL_APP_PASSWORD NO CONFIGURADO EN RUNTIME');
-  console.error('   Verifica en Railway Dashboard → Variables');
+  console.error('❌ SENDGRID: EMAIL_APP_PASSWORD no configurado');
 }
+
+// TUS PLANTILLAS ORIGINALES COMPLETAS
+const EMAIL_TEMPLATES = {
+  verification: (verificationCode, userName = '') => `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verifica tu email</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">Verify Your Email</h1>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Bienvenido a R&V SPA,</p>
+    <p>Por favor confirma tu correo electrónico. Tu código es:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4c66afff;">${verificationCode}</span>
+    </div>
+    <p>Inserta este código en la página de verificación para completar tu registro.</p>
+    <p>El código expirará en 15 minutos por razones de seguridad.</p>
+    <p>Si no creaste la cuenta con nosotros simplemente ignora este correo.</p>
+    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>This is an automated message, please do not reply to this email.</p>
+  </div>
+</body>
+</html>
+  `,
+
+  passwordResetRequest: (resetURL, userName = '') => `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cambia tu contraseña</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">Cambiar contraseña</h1>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Hola ${userName || ''},</p>
+    <p>Recibimos una petición para cambiar tu contraseña. Si no lo hiciste ignora este correo.</p>
+    <p>Para cambiar tu contraseña clickea el siguiente botón:</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${resetURL}" style="background-color: #4c66afff; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Cambiar contraseña</a>
+    </div>
+    <p>El link va a expirar en 1 hora por razones de seguridad.</p>
+    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>Este es un mensaje automático por favor no respondas este email</p>
+  </div>
+</body>
+</html>
+  `,
+
+  passwordResetSuccess: (userName = '') => `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contraseña Restablecida</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">Contraseña Restablecida</h1>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Hola ${userName || ''},</p>
+    <p>Te escribimos para confirmar que tu contraseña ha sido restablecida exitosamente.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="background-color: #4c66afff; color: white; width: 50px; height: 50px; line-height: 50px; border-radius: 50%; display: inline-block; font-size: 30px;">
+        ✓
+      </div>
+    </div>
+    <p>Si no iniciaste este restablecimiento de contraseña, por favor contacta a nuestro equipo de soporte inmediatamente.</p>
+    <p>Por razones de seguridad, te recomendamos que:</p>
+    <ul>
+      <li>Uses una contraseña fuerte y única</li>
+      <li>Actives la autenticación de dos factores si está disponible</li>
+      <li>Evites usar la misma contraseña en múltiples sitios</li>
+    </ul>
+    <p>Gracias por ayudarnos a mantener tu cuenta segura.</p>
+    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>Este es un mensaje automático por favor no respondas este email</p>
+  </div>
+</body>
+</html>
+  `,
+
+  welcome: (userName = '') => `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>¡Bienvenido!</title>
+</head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0;">¡Bienvenido a R&V SPA!</h1>
+  </div>
+  <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
+    <p>Hola ${userName},</p>
+    <p>¡Nos alegra darte la bienvenida a nuestra plataforma!</p>
+    <p>Tu cuenta ha sido verificada exitosamente y ahora tienes acceso completo a todas nuestras funcionalidades.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="background-color: #4c66afff; color: white; width: 60px; height: 60px; line-height: 60px; border-radius: 50%; display: inline-block; font-size: 30px;">
+        🎉
+      </div>
+    </div>
+    <p><strong>¿Qué puedes hacer ahora?</strong></p>
+    <ul>
+      <li>Acceder a tu dashboard personal</li>
+      <li>Gestionar tu perfil y preferencias</li>
+      <li>Explorar todas las funcionalidades disponibles</li>
+    </ul>
+    <p>Si tienes alguna pregunta, no dudes en contactar a nuestro equipo de soporte.</p>
+    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+  </div>
+  <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
+    <p>Este es un mensaje automático por favor no respondas este email</p>
+  </div>
+</body>
+</html>
+  `
+};
 
 export class SendGridService {
   static async sendEmail(to, subject, html, text = '') {
     try {
-      console.log('📧 [SENDGRID] Iniciando envío...');
-      console.log('   To:', to);
-      console.log('   From config:', process.env.EMAIL_FROM_ADDRESS);
+      console.log('📧 [SENDGRID] Enviando email a:', to);
       
-      // Validación explícita
-      if (!process.env.EMAIL_FROM_ADDRESS) {
-        throw new Error('EMAIL_FROM_ADDRESS no está definido en el entorno');
-      }
-
       const msg = {
         to,
         from: {
-          name: process.env.EMAIL_FROM_NAME || 'RYV SPA',
+          name: process.env.EMAIL_FROM_NAME || 'R&V SPA',
           email: process.env.EMAIL_FROM_ADDRESS
         },
         subject,
-        html,
-        text: text || 'Por favor verifica tu email'
+        text: text || this.htmlToText(html),
+        html
       };
-
-      console.log('📧 [SENDGRID] Mensaje configurado, enviando...');
-      
-      // Solo intentar enviar si la API Key está configurada
-      if (!process.env.EMAIL_APP_PASSWORD) {
-        throw new Error('SendGrid no configurado - falta EMAIL_APP_PASSWORD');
-      }
 
       const result = await sgMail.send(msg);
+      
       console.log('✅ [SENDGRID] Email enviado exitosamente');
+      console.log('   ID:', result[0]?.headers?.['x-message-id']);
       
-      return {
-        success: true,
-        messageId: result[0]?.headers?.['x-message-id']
+      return { 
+        success: true, 
+        messageId: result[0]?.headers?.['x-message-id'],
+        response: result[0] 
       };
-      
     } catch (error) {
-      console.error('❌ [SENDGRID] Error detallado:');
-      console.error('   Mensaje:', error.message);
-      console.error('   Stack:', error.stack);
-      return {
-        success: false,
-        error: error.message
+      console.error('❌ [SENDGRID] ERROR ENVIANDO EMAIL:');
+      console.error('   Para:', to);
+      console.error('   Error:', error.message);
+      
+      return { 
+        success: false, 
+        error: error.message,
+        code: error.code 
       };
     }
   }
 
+  // Email de verificación
   static async sendVerificationEmail(email, verificationCode, userName = '') {
     const subject = 'Verifica tu email - R&V SPA';
-    const html = `
-      <div>
-        <h2>Verifica tu email</h2>
-        <p>Tu código es: <strong>${verificationCode}</strong></p>
-      </div>
-    `;
-    
-    return await this.sendEmail(email, subject, html);
+    const html = EMAIL_TEMPLATES.verification(verificationCode, userName);
+    const text = `Tu código de verificación es: ${verificationCode}. Insértalo en la página de verificación.`;
+
+    return await this.sendEmail(email, subject, html, text);
+  }
+
+  // Email de bienvenida
+  static async sendWelcomeEmail(email, userName) {
+    const subject = '¡Bienvenido a R&V SPA!';
+    const html = EMAIL_TEMPLATES.welcome(userName);
+    const text = `¡Bienvenido ${userName}! Tu cuenta ha sido verificada exitosamente.`;
+
+    return await this.sendEmail(email, subject, html, text);
+  }
+
+  // Email de restablecimiento de contraseña
+  static async sendPasswordResetEmail(email, resetToken, userName = '') {
+    const resetUrl = `${process.env.CLIENT_URL}/restablecer-contraseña/${resetToken}`;
+    const subject = 'Cambia tu contraseña - R&V SPA';
+    const html = EMAIL_TEMPLATES.passwordResetRequest(resetUrl, userName);
+    const text = `Para restablecer tu contraseña, visita: ${resetUrl}`;
+
+    return await this.sendEmail(email, subject, html, text);
+  }
+
+  // Email de confirmación de contraseña restablecida
+  static async sendPasswordResetConfirmation(email, userName = '') {
+    const subject = 'Contraseña restablecida - R&V SPA';
+    const html = EMAIL_TEMPLATES.passwordResetSuccess(userName);
+    const text = 'Tu contraseña ha sido restablecida exitosamente.';
+
+    return await this.sendEmail(email, subject, html, text);
+  }
+
+  // Utilidad para convertir HTML a texto plano
+  static htmlToText(html) {
+    return html
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 }
 

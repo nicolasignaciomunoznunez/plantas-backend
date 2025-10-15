@@ -1,7 +1,7 @@
 // config/emailConfig.js
 import { SendGridService } from '../services/sendgridService.js';
 
-// Exportar para compatibilidad
+// Exportar para compatibilidad con tu código existente
 export const EmailService = SendGridService;
 export default SendGridService;
 
