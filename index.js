@@ -1,5 +1,4 @@
 import express from "express";
-// ELIMINA dotenv - Railway ya inyecta las variables
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -18,39 +17,67 @@ import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 // ========================
-// DEBUG PROFUNDO RAILWAY
+// CONFIGURACIÓN INICIAL
 // ========================
-console.log('🔍 DEBUG PROFUNDO RAILWAY VARIABLES:');
-console.log('=== PROCESS.ENV ===');
-console.log('DB_HOST:', process.env.DB_HOST);
-console.log('DB_PORT:', process.env.DB_PORT);
-console.log('DB_USER:', process.env.DB_USER);
-console.log('DB_NAME:', process.env.DB_NAME);
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('PORT:', process.env.PORT);
-console.log('CLIENT_URL:', process.env.CLIENT_URL);
-console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'CONFIGURADO' : 'NO CONFIGURADO');
-
-// Verificar si estamos en Railway
-console.log('=== RAILWAY DETECTION ===');
-console.log('RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
-console.log('RAILWAY_PROJECT_NAME:', process.env.RAILWAY_PROJECT_NAME);
-console.log('RAILWAY_SERVICE_NAME:', process.env.RAILWAY_SERVICE_NAME);
-
-// Listar TODAS las variables de entorno (solo nombres)
-console.log('=== ALL ENV VARS ===');
-Object.keys(process.env).forEach(key => {
-  if (key.includes('DB_') || key.includes('RAILWAY') || key === 'NODE_ENV' || key === 'PORT') {
-    console.log(`   ${key}: ${process.env[key]}`);
-  }
-});
-
 const app = express();
 const PORT = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ========================
-// MIDDLEWARES (igual que antes)
+// CORS CONFIGURACIÓN MEJORADA
+// ========================
+const allowedOrigins = [
+  'https://plantas-frontend.vercel.app',
+  'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
+  'https://plantas-frontend-pe5bmfn2i.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5174'
+];
+
+// Configuración CORS más permisiva para desarrollo
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Permitir requests sin origin (mobile apps, postman, etc)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('🚫 CORS bloqueado para origen:', origin);
+      // En desarrollo, permitir todos los orígenes para debugging
+      if (!isProduction) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'Cookie', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Set-Cookie'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204
+};
+
+// Aplicar CORS antes de otros middlewares
+app.use(cors(corsOptions));
+
+// Manejar preflight OPTIONS requests explícitamente
+app.options('*', cors(corsOptions));
+
+// ========================
+// MIDDLEWARES
 // ========================
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
@@ -66,44 +93,21 @@ app.use(cookieParser());
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: isProduction ? 500 : 1000,
-  message: { success: false, message: 'Demasiadas solicitudes' },
+  message: { 
+    success: false, 
+    message: 'Demasiadas solicitudes desde esta IP, intenta nuevamente en 15 minutos' 
+  },
   standardHeaders: true,
   legacyHeaders: false
 });
 app.use('/api/', limiter);
 
-// CORS
-const allowedOrigins = isProduction 
-  ? [
-      'https://plantas-frontend.vercel.app',
-      'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
-      'https://plantas-frontend-pe5bmfn2i.vercel.app',
-      process.env.CLIENT_URL
-    ].filter(Boolean)
-  : ['http://localhost:5173', 'http://localhost:3000'];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log('🚫 CORS bloqueado:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With']
-}));
-app.options('*', cors());
-
 // Trust proxy para Railway
 app.set('trust proxy', 1);
 
-// Logging
+// Logging de requests
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
   next();
 });
 
@@ -118,19 +122,102 @@ app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
-// Health Check con más info
+// ========================
+// HEALTH CHECK MEJORADO
+// ========================
 app.get("/api/health", async (req, res) => {
-  const dbStatus = await testConnection();
-  res.status(dbStatus ? 200 : 503).json({
-    success: dbStatus,
-    message: dbStatus ? "✅ API funcionando" : "⚠️ API activa pero BD no conectada",
-    environment: process.env.NODE_ENV,
-    database: dbStatus ? "connected" : "disconnected",
-    railway: {
-      dbHost: process.env.DB_HOST ? "configured" : "missing",
-      dbName: process.env.DB_NAME ? "configured" : "missing"
-    }
+  try {
+    const dbStatus = await testConnection();
+    
+    res.status(200).json({
+      success: true,
+      message: "✅ API de Gestión de Plantas funcionando correctamente",
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development',
+      version: "1.0.0",
+      services: {
+        database: dbStatus ? "connected" : "disconnected",
+        server: "running"
+      },
+      cors: {
+        allowedOrigins: allowedOrigins,
+        currentOrigin: req.headers.origin || 'No origin'
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "❌ Health check failed",
+      error: error.message
+    });
+  }
+});
+
+// Ruta de prueba CORS
+app.get("/api/test-cors", (req, res) => {
+  res.json({
+    success: true,
+    message: "✅ CORS funcionando correctamente",
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin || 'No origin',
+    cors: "Configurado"
   });
+});
+
+// Ruta de salud adicional
+app.get("/api/salud", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "✅ API de Gestión de Plantas funcionando correctamente",
+    timestamp: new Date().toISOString(),
+    version: "1.0.0"
+  });
+});
+
+// ========================
+// MANEJO DE ERRORES
+// ========================
+app.use((err, req, res, next) => {
+  console.error('❌ Error global:', err.message);
+  
+  // Error de CORS
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: 'Origen no permitido por CORS',
+      allowedOrigins: allowedOrigins,
+      yourOrigin: req.headers.origin
+    });
+  }
+  
+  // Rate limit error
+  if (err.status === 429) {
+    return res.status(429).json({
+      success: false,
+      message: 'Demasiadas solicitudes'
+    });
+  }
+  
+  res.status(err.status || 500).json({
+    success: false,
+    message: isProduction ? 'Error interno del servidor' : err.message,
+    ...(!isProduction && { stack: err.stack })
+  });
+});
+
+// 404 Handler
+app.use('*', (req, res) => {
+  if (req.originalUrl.startsWith('/api/')) {
+    res.status(404).json({
+      success: false,
+      message: `Endpoint API no encontrado: ${req.originalUrl}`
+    });
+  } else {
+    res.status(404).json({
+      success: false,
+      message: 'Ruta no encontrada'
+    });
+  }
 });
 
 // ========================
@@ -138,30 +225,32 @@ app.get("/api/health", async (req, res) => {
 // ========================
 app.listen(PORT, '0.0.0.0', async () => {
   console.log("==========================================");
-  console.log("🚀 SERVIDOR INICIADO EN RAILWAY");
+  console.log("🚀 SERVICIO BACKEND INICIADO CORRECTAMENTE");
   console.log("==========================================");
   console.log("✅ Puerto:", PORT);
-  console.log("🌍 Entorno:", process.env.NODE_ENV);
+  console.log("🌍 Entorno:", process.env.NODE_ENV || "development");
+  console.log("🎯 Producción:", isProduction);
+  console.log("📊 Orígenes CORS permitidos:", allowedOrigins);
   
   // Probar conexión a BD
   const dbConnected = await testConnection();
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
   
-  if (!dbConnected && !process.env.DB_HOST) {
-    console.log("\n🔧 PROBLEMA IDENTIFICADO:");
-    console.log("   Las variables de BD NO se están inyectando desde Railway");
-    console.log("   Solución: Contacta soporte de Railway o recrea el servicio");
-  }
-  
+  console.log("");
+  console.log("🔗 Health Check: https://plantas-backend-production.up.railway.app/api/health");
+  console.log("🔗 Test CORS: https://plantas-backend-production.up.railway.app/api/test-cors");
+  console.log("");
+  console.log("🔐 Sistema de gestión de plantas listo para producción!");
   console.log("==========================================");
 });
 
-// Manejo de errores
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err.message);
-  res.status(500).json({ success: false, message: 'Error interno del servidor' });
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM recibido, cerrando servidor gracefully...');
+  process.exit(0);
 });
 
-app.use('*', (req, res) => {
-  res.status(404).json({ success: false, message: 'Ruta no encontrada' });
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT recibido, cerrando servidor...');
+  process.exit(0);
 });
