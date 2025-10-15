@@ -17,7 +17,7 @@ import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 const app = express();
-const PORT = process.env.PORT || 10000; // ← PUERTO ESTÁNDAR RAILWAY
+const PORT = process.env.PORT || 8080; // ← PUERTO ESTÁNDAR RAILWAY
 
 console.log('🚀 INICIANDO EN PUERTO:', PORT);
 
