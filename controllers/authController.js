@@ -1,7 +1,7 @@
 import bcryptjs from "bcryptjs";
 import crypto from "crypto";
 import { generarTokenYEstablecerCookie } from "../utils/generarTokenYEstablecerCookie.js";
-import { EmailService } from "../services/emailService.js";
+import { EmailService } from "../services/sendgridService.js";
 import { Usuario } from "../models/usuarioModel.js";
 
 export const registrar = async (req, res) => {
