@@ -112,6 +112,18 @@ app.get("/api/health", async (req, res) => {
   });
 });
 
+app.get("/api/debug-env", (req, res) => {
+  res.json({
+    emailAppPassword: process.env.EMAIL_APP_PASSWORD ? 
+      `✅ Presente (${process.env.EMAIL_APP_PASSWORD.length} caracteres)` : '❌ FALTANTE',
+    emailFromAddress: process.env.EMAIL_FROM_ADDRESS || '❌ FALTANTE',
+    emailFromName: process.env.EMAIL_FROM_NAME || '❌ FALTANTE',
+    allEnvKeys: Object.keys(process.env).filter(key => 
+      key.includes('EMAIL') || key.includes('SENDGRID')
+    )
+  });
+});
+
 // Iniciar servidor
 app.listen(PORT, '0.0.0.0', async () => {
   console.log("==========================================");
