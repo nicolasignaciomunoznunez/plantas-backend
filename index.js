@@ -6,6 +6,7 @@ import compression from "compression";
 import rateLimit from "express-rate-limit";
 
 import { testConnection } from "./db/connectDB.js";
+import { verifyEmailConnection } from "./config/emailConfig.js"; // 👈 IMPORTAR
 
 // Importar rutas
 import authRoutes from "./routes/authRoutes.js";
@@ -17,7 +18,7 @@ import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 const app = express();
-const PORT = process.env.PORT || 8080; // ← PUERTO ESTÁNDAR RAILWAY
+const PORT = process.env.PORT || 8080;
 
 console.log('🚀 INICIANDO EN PUERTO:', PORT);
 
@@ -55,6 +56,34 @@ app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
+// ✅ AGREGAR RUTA DE TEST EMAIL TEMPORAL
+app.post("/api/test-email", async (req, res) => {
+  try {
+    const { EmailService } = await import("./services/emailService.js");
+    const result = await EmailService.sendVerificationEmail(
+      process.env.EMAIL_USER, // Enviar a ti mismo para prueba
+      '999999', 
+      'Test User'
+    );
+    
+    res.json({ 
+      success: true, 
+      result,
+      config: {
+        emailUser: process.env.EMAIL_USER ? "✅ Configurado" : "❌ Faltante",
+        emailPass: process.env.EMAIL_APP_PASSWORD ? "✅ Configurado" : "❌ Faltante",
+        nodeEnv: process.env.NODE_ENV
+      }
+    });
+  } catch (error) {
+    res.json({ 
+      success: false, 
+      error: error.message,
+      stack: error.stack 
+    });
+  }
+});
+
 // Health check en raíz
 app.get("/", (req, res) => {
   res.json({
@@ -84,6 +113,11 @@ app.listen(PORT, '0.0.0.0', async () => {
   
   const dbConnected = await testConnection();
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
+  
+  // ✅ VERIFICAR CONEXIÓN DE EMAIL AL INICIAR
+  console.log("📧 Verificando configuración de email...");
+  const emailConnected = await verifyEmailConnection();
+  console.log("📧 Email service:", emailConnected ? "✅ CONECTADO" : "❌ ERROR");
   
   console.log("🌍 Entorno:", process.env.NODE_ENV);
   console.log("🔗 El dominio debería funcionar ahora");
