@@ -21,38 +21,14 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 // ========================
 const app = express();
 const PORT = process.env.PORT || 5000;
-const isProduction = process.env.NODE_ENV === 'production';
 
 // ========================
-// CORS CONFIGURACIÓN MEJORADA
+// CORS COMPLETAMENTE PERMISIVO
 // ========================
-const allowedOrigins = [
-  'https://plantas-frontend.vercel.app',
-  'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
-  'https://plantas-frontend-pe5bmfn2i.vercel.app',
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:5174'
-];
+console.log('🔓 CONFIGURANDO CORS PERMISIVO...');
 
-// Configuración CORS más permisiva para desarrollo
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Permitir requests sin origin (mobile apps, postman, etc)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('🚫 CORS bloqueado para origen:', origin);
-      // En desarrollo, permitir todos los orígenes para debugging
-      if (!isProduction) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    }
-  },
+app.use(cors({
+  origin: true, // PERMITIR TODOS LOS ORÍGENES
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
@@ -65,16 +41,11 @@ const corsOptions = {
     'Access-Control-Request-Method',
     'Access-Control-Request-Headers'
   ],
-  exposedHeaders: ['Set-Cookie'],
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-};
+  exposedHeaders: ['Set-Cookie']
+}));
 
-// Aplicar CORS antes de otros middlewares
-app.use(cors(corsOptions));
-
-// Manejar preflight OPTIONS requests explícitamente
-app.options('*', cors(corsOptions));
+// Manejar preflight OPTIONS explícitamente
+app.options('*', cors());
 
 // ========================
 // MIDDLEWARES
@@ -92,7 +63,7 @@ app.use(cookieParser());
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: isProduction ? 500 : 1000,
+  max: 500,
   message: { 
     success: false, 
     message: 'Demasiadas solicitudes desde esta IP, intenta nuevamente en 15 minutos' 
@@ -107,7 +78,7 @@ app.set('trust proxy', 1);
 
 // Logging de requests
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
+  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
   next();
 });
 
@@ -123,7 +94,7 @@ app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 // ========================
-// HEALTH CHECK MEJORADO
+// HEALTH CHECK
 // ========================
 app.get("/api/health", async (req, res) => {
   try {
@@ -139,10 +110,8 @@ app.get("/api/health", async (req, res) => {
         database: dbStatus ? "connected" : "disconnected",
         server: "running"
       },
-      cors: {
-        allowedOrigins: allowedOrigins,
-        currentOrigin: req.headers.origin || 'No origin'
-      }
+      cors: "permissive",
+      origin: req.headers.origin || 'No origin'
     });
   } catch (error) {
     res.status(500).json({
@@ -160,7 +129,19 @@ app.get("/api/test-cors", (req, res) => {
     message: "✅ CORS funcionando correctamente",
     timestamp: new Date().toISOString(),
     origin: req.headers.origin || 'No origin',
-    cors: "Configurado"
+    cors: "Permisivo - Todos los orígenes permitidos"
+  });
+});
+
+// Ruta específica para probar login CORS
+app.post("/api/auth/test-cors", (req, res) => {
+  res.json({
+    success: true,
+    message: "✅ Ruta de login accesible via CORS",
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin,
+    method: "POST",
+    cors: "Funcionando"
   });
 });
 
@@ -180,44 +161,20 @@ app.get("/api/salud", (req, res) => {
 app.use((err, req, res, next) => {
   console.error('❌ Error global:', err.message);
   
-  // Error de CORS
-  if (err.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      success: false,
-      message: 'Origen no permitido por CORS',
-      allowedOrigins: allowedOrigins,
-      yourOrigin: req.headers.origin
-    });
-  }
-  
-  // Rate limit error
-  if (err.status === 429) {
-    return res.status(429).json({
-      success: false,
-      message: 'Demasiadas solicitudes'
-    });
-  }
-  
   res.status(err.status || 500).json({
     success: false,
-    message: isProduction ? 'Error interno del servidor' : err.message,
-    ...(!isProduction && { stack: err.stack })
+    message: 'Error interno del servidor',
+    origin: req.headers.origin
   });
 });
 
 // 404 Handler
 app.use('*', (req, res) => {
-  if (req.originalUrl.startsWith('/api/')) {
-    res.status(404).json({
-      success: false,
-      message: `Endpoint API no encontrado: ${req.originalUrl}`
-    });
-  } else {
-    res.status(404).json({
-      success: false,
-      message: 'Ruta no encontrada'
-    });
-  }
+  res.status(404).json({
+    success: false,
+    message: `Ruta no encontrada: ${req.originalUrl}`,
+    origin: req.headers.origin
+  });
 });
 
 // ========================
@@ -229,16 +186,15 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log("==========================================");
   console.log("✅ Puerto:", PORT);
   console.log("🌍 Entorno:", process.env.NODE_ENV || "development");
-  console.log("🎯 Producción:", isProduction);
-  console.log("📊 Orígenes CORS permitidos:", allowedOrigins);
   
-  // Probar conexión a BD
   const dbConnected = await testConnection();
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
+  console.log("🔓 CORS: PERMITIENDO TODOS LOS ORÍGENES");
   
   console.log("");
-  console.log("🔗 Health Check: https://plantas-backend-production.up.railway.app/api/health");
-  console.log("🔗 Test CORS: https://plantas-backend-production.up.railway.app/api/test-cors");
+  console.log("🔗 Health Check: https://angelic-compassion.up.railway.app/api/health");
+  console.log("🔗 Test CORS: https://angelic-compassion.up.railway.app/api/test-cors");
+  console.log("🔗 Test Login CORS: https://angelic-compassion.up.railway.app/api/auth/test-cors");
   console.log("");
   console.log("🔐 Sistema de gestión de plantas listo para producción!");
   console.log("==========================================");
@@ -246,7 +202,7 @@ app.listen(PORT, '0.0.0.0', async () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM recibido, cerrando servidor gracefully...');
+  console.log('🛑 SIGTERM recibido, cerrando servidor...');
   process.exit(0);
 });
 
