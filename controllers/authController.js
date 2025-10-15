@@ -1,294 +1,291 @@
 import bcryptjs from "bcryptjs";
 import crypto from "crypto";
 import { generarTokenYEstablecerCookie } from "../utils/generarTokenYEstablecerCookie.js";
-// COMENTAR TEMPORALMENTE las importaciones de email - USAREMOS NODEMAILER DESPUÉS
-/*
-import {
-	enviarCorreoRestablecimientoContraseña,
-	enviarCorreoContraseñaRestablecida,
-	enviarCorreoVerificacion,
-	enviarCorreoBienvenida,
-} from "../mailtrap/emails.js";
-*/
+import { EmailService } from "../services/emailService.js";
 import { Usuario } from "../models/usuarioModel.js";
 
-// FUNCIONES TEMPORALES VACÍAS - REEMPLAZAR CON NODEMAILER DESPUÉS
-const enviarCorreoRestablecimientoContraseña = async (email, url) => { 
-	console.log('📧 [EMAIL TEMPORAL] Restablecimiento contraseña para:', email, 'URL:', url);
-	return true;
-};
-
-const enviarCorreoContraseñaRestablecida = async (email) => { 
-	console.log('📧 [EMAIL TEMPORAL] Contraseña restablecida para:', email);
-	return true;
-};
-
-const enviarCorreoVerificacion = async (email, codigo) => { 
-	console.log('📧 [EMAIL TEMPORAL] Verificación email para:', email, 'Código:', codigo);
-	return true;
-};
-
-const enviarCorreoBienvenida = async (email, nombre) => { 
-	console.log('📧 [EMAIL TEMPORAL] Bienvenida para:', email, 'Nombre:', nombre);
-	return true;
-};
-
 export const registrar = async (req, res) => {
-	const { email, password, nombre, rol } = req.body;
+  const { email, password, nombre, rol } = req.body;
 
-	try {
-		if (!email || !password || !nombre) {
-			return res.status(400).json({ success: false, message: "Complete todos los campos" });
-		}
+  try {
+    if (!email || !password || !nombre) {
+      return res.status(400).json({ success: false, message: "Complete todos los campos" });
+    }
 
-		const usuarioYaExiste = await Usuario.buscarPorEmail(email);
-		console.log("Verificando si usuario existe:", usuarioYaExiste);
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ success: false, message: "Formato de email inválido" });
+    }
 
-		if (usuarioYaExiste) {
-			return res.status(400).json({ success: false, message: "El usuario ya existe" });
-		}
+    // Validar longitud de contraseña
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: "La contraseña debe tener al menos 6 caracteres" });
+    }
 
-		const contraseñaHasheada = await bcryptjs.hash(password, 10);
-		
-		// Generar token de verificación de email (6 dígitos)
-		const tokenVerificacion = Math.floor(100000 + Math.random() * 900000).toString();
-		const tokenVerificacionExpira = new Date(Date.now() + 24 * 60 * 60 * 1000); 
+    const usuarioYaExiste = await Usuario.buscarPorEmail(email);
+    console.log("Verificando si usuario existe:", usuarioYaExiste);
 
-		// Crear usuario con la nueva estructura
-		const nuevoUsuario = await Usuario.crear({
-            email,
-            password_hash: contraseñaHasheada,
-            nombre,
-            rol: rol || 'cliente',
-            verificationToken: tokenVerificacion, 
-            verificationTokenExpiresAt: tokenVerificacionExpira,  
-        });
+    if (usuarioYaExiste) {
+      return res.status(400).json({ success: false, message: "El usuario ya existe" });
+    }
 
-		const token = generarTokenYEstablecerCookie(res, nuevoUsuario.id);
+    const contraseñaHasheada = await bcryptjs.hash(password, 10);
+    
+    // Generar token de verificación de email (6 dígitos)
+    const tokenVerificacion = Math.floor(100000 + Math.random() * 900000).toString();
+    const tokenVerificacionExpira = new Date(Date.now() + 24 * 60 * 60 * 1000); 
 
-		// TEMPORAL: Email deshabilitado - solo log
-		await enviarCorreoVerificacion(nuevoUsuario.email, tokenVerificacion);
+    // Crear usuario con la nueva estructura
+    const nuevoUsuario = await Usuario.crear({
+      email,
+      password_hash: contraseñaHasheada,
+      nombre,
+      rol: rol || 'cliente',
+      verificationToken: tokenVerificacion, 
+      verificationTokenExpiresAt: tokenVerificacionExpira,  
+    });
 
-		res.status(201).json({
-			success: true,
-			message: "Usuario creado correctamente",
-			usuario: {
-				id: nuevoUsuario.id,
-				email: nuevoUsuario.email,
-				nombre: nuevoUsuario.nombre,
-				rol: nuevoUsuario.rol,
-				estaVerificado: nuevoUsuario.estaVerificado,
-				creadoEn: nuevoUsuario.creadoEn,
-				actualizadoEn: nuevoUsuario.actualizadoEn
-			},
-			token: token,
-		});
-	} catch (error) {
-		console.log("Error en registro:", error);
-		if (error.message.includes('ER_DUP_ENTRY') || error.message.includes('El email ya está registrado')) {
-			return res.status(400).json({ success: false, message: "El usuario ya existe" });
-		}
-		res.status(400).json({ success: false, message: error.message });
-	}
+    const token = generarTokenYEstablecerCookie(res, nuevoUsuario.id);
+
+    // Enviar email de verificación
+    const emailResult = await EmailService.sendVerificationEmail(
+      nuevoUsuario.email, 
+      tokenVerificacion, 
+      nuevoUsuario.nombre
+    );
+
+    if (!emailResult.success) {
+      console.warn('⚠️ Usuario creado pero email no enviado:', emailResult.error);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Usuario creado correctamente" + (emailResult.success ? "" : " (pero email no enviado)"),
+      usuario: {
+        id: nuevoUsuario.id,
+        email: nuevoUsuario.email,
+        nombre: nuevoUsuario.nombre,
+        rol: nuevoUsuario.rol,
+        estaVerificado: false, // Siempre false al registrar
+        creadoEn: nuevoUsuario.creadoEn || nuevoUsuario.createdAt,
+        actualizadoEn: nuevoUsuario.actualizadoEn || nuevoUsuario.updatedAt
+      },
+      token: token,
+    });
+  } catch (error) {
+    console.log("Error en registro:", error);
+    if (error.message.includes('ER_DUP_ENTRY') || error.message.includes('El email ya está registrado')) {
+      return res.status(400).json({ success: false, message: "El usuario ya existe" });
+    }
+    res.status(400).json({ success: false, message: error.message });
+  }
 };
 
 export const verificarEmail = async (req, res) => {
-    const { code } = req.body;
-    
-    console.log('📧 Código recibido en backend:', code);
-    
-    try {
-        if (!code) {
-            return res.status(400).json({ 
-                success: false, 
-                message: "Código de verificación es requerido" 
-            });
-        }
-
-        const usuario = await Usuario.buscarPorTokenVerificacion(code);
-        
-        if (!usuario) {
-            return res.status(400).json({ success: false, message: "Código inválido o ya expirado." });
-        }
-
-        if (usuario.verificationTokenExpiresAt < new Date()) {  
-            return res.status(400).json({ success: false, message: "Código inválido o ya expirado." });
-        }
-
-        const usuarioActualizado = await Usuario.verificarUsuario(usuario.id);
-
-        // TEMPORAL: Email deshabilitado - solo log
-        await enviarCorreoBienvenida(usuarioActualizado.email, usuarioActualizado.nombre);
-
-        res.status(200).json({
-            success: true,
-            message: "Email verificado correctamente",
-            usuario: {
-                id: usuarioActualizado.id,
-                email: usuarioActualizado.email,
-                nombre: usuarioActualizado.nombre,
-                rol: usuarioActualizado.rol,
-                estaVerificado: usuarioActualizado.isVerified,
-                ultimoInicioSesion: usuarioActualizado.lastLogin,
-                creadoEn: usuarioActualizado.createdAt,
-                actualizadoEn: usuarioActualizado.updatedAt
-            },
-        });
-    } catch (error) {
-        console.log("Error en la verificación del email:", error);
-        res.status(500).json({ success: false, message: "Error del servidor" });
+  const { code } = req.body;
+  
+  console.log('📧 Código recibido en backend:', code);
+  
+  try {
+    if (!code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Código de verificación es requerido" 
+      });
     }
+
+    const usuario = await Usuario.buscarPorTokenVerificacion(code);
+    
+    if (!usuario) {
+      return res.status(400).json({ success: false, message: "Código inválido o ya expirado." });
+    }
+
+    if (usuario.verificationTokenExpiresAt < new Date()) {  
+      return res.status(400).json({ success: false, message: "Código inválido o ya expirado." });
+    }
+
+    const usuarioActualizado = await Usuario.verificarUsuario(usuario.id);
+
+    // Enviar email de bienvenida
+    await EmailService.sendWelcomeEmail(usuarioActualizado.email, usuarioActualizado.nombre);
+
+    res.status(200).json({
+      success: true,
+      message: "Email verificado correctamente",
+      usuario: usuarioActualizado
+    });
+  } catch (error) {
+    console.log("Error en la verificación del email:", error);
+    res.status(500).json({ success: false, message: "Error del servidor" });
+  }
 };
 
 export const iniciarSesion = async (req, res) => {
-	const { email, password } = req.body;
-	try {
-		// ✅ TEMPORAL: BYPASS COMPLETO para testing
-		const esUsuarioPrueba = email.includes('test.com') || email.includes('demo.com');
-		
-		if (esUsuarioPrueba) {
-			console.log('🔐 [AUTH] BYPASS para usuario de prueba:', email);
-			
-			// Buscar o crear usuario de prueba
-			let usuario = await Usuario.buscarPorEmail(email);
-			
-			if (!usuario) {
-				// Si no existe, crear uno temporal
-				const nombre = email.split('@')[0];
-				const rol = nombre.toLowerCase();
-				
-				// Crear usuario temporal (esto depende de tu modelo)
-				usuario = {
-					id: Date.now(), // ID temporal
-					email: email,
-					nombre: nombre.charAt(0).toUpperCase() + nombre.slice(1) + ' Test',
-					rol: rol,
-					estaVerificado: true,
-					password_hash: '' // No importa para bypass
-				};
-			}
-			
-			const token = generarTokenYEstablecerCookie(res, usuario.id);
-			
-			res.status(200).json({
-				success: true,
-				message: "Conectado correctamente (BYPASS)",
-				usuario: {
-					id: usuario.id,
-					email: usuario.email,
-					nombre: usuario.nombre,
-					rol: usuario.rol,
-					estaVerificado: true,
-					ultimoInicioSesion: new Date(),
-					creadoEn: new Date(),
-					actualizadoEn: new Date()
-				},
-				token: token,
-			});
-			return;
-		}
-		
-		// ✅ Código normal para usuarios reales
-		const usuario = await Usuario.buscarPorEmail(email);
-		if (!usuario) {
-			return res.status(400).json({ success: false, message: "Credenciales inválidas" });
-		}
-		
-		const esContraseñaValida = await bcryptjs.compare(password, usuario.password_hash);
-		if (!esContraseñaValida) {
-			return res.status(400).json({ success: false, message: "Credenciales inválidas" });
-		}
+  const { email, password } = req.body;
+  
+  try {
+    // Validaciones básicas
+    if (!email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Email y contraseña son requeridos" 
+      });
+    }
 
-		const token = generarTokenYEstablecerCookie(res, usuario.id);
-		await Usuario.actualizarUltimoInicioSesion(usuario.id);
-		const usuarioActualizado = await Usuario.buscarPorId(usuario.id);
+    // Buscar usuario
+    const usuario = await Usuario.buscarPorEmail(email);
+    if (!usuario) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Credenciales inválidas" 
+      });
+    }
+    
+    // Verificar si el usuario está verificado
+    const estaVerificado = usuario.estaVerificado || usuario.isVerified;
+    if (!estaVerificado) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Por favor verifica tu email antes de iniciar sesión" 
+      });
+    }
 
-		res.status(200).json({
-			success: true,
-			message: "Conectado correctamente",
-			usuario: {
-				id: usuarioActualizado.id,
-				email: usuarioActualizado.email,
-				nombre: usuarioActualizado.nombre,
-				rol: usuarioActualizado.rol,
-				estaVerificado: usuarioActualizado.estaVerificado,
-				ultimoInicioSesion: usuarioActualizado.ultimoInicioSesion,
-				creadoEn: usuarioActualizado.creadoEn,
-				actualizadoEn: usuarioActualizado.actualizadoEn
-			},
-			token: token,
-		});
-	} catch (error) {
-		console.log("Error al iniciar sesión:", error);
-		res.status(400).json({ success: false, message: error.message });
-	}
+    // Verificar contraseña
+    const esContraseñaValida = await bcryptjs.compare(password, usuario.password_hash);
+    if (!esContraseñaValida) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Credenciales inválidas" 
+      });
+    }
+
+    // Generar token y actualizar último inicio de sesión
+    const token = generarTokenYEstablecerCookie(res, usuario.id);
+    await Usuario.actualizarUltimoInicioSesion(usuario.id);
+    
+    // Obtener usuario actualizado
+    const usuarioActualizado = await Usuario.buscarPorId(usuario.id);
+
+    // Respuesta consistente
+    res.status(200).json({
+      success: true,
+      message: "Conectado correctamente",
+      usuario: {
+        id: usuarioActualizado.id,
+        email: usuarioActualizado.email,
+        nombre: usuarioActualizado.nombre,
+        rol: usuarioActualizado.rol,
+        estaVerificado: true,
+        ultimoInicioSesion: usuarioActualizado.ultimoInicioSesion || usuarioActualizado.lastLogin,
+        creadoEn: usuarioActualizado.creadoEn || usuarioActualizado.createdAt,
+        actualizadoEn: usuarioActualizado.actualizadoEn || usuarioActualizado.updatedAt
+      },
+      token: token,
+    });
+  } catch (error) {
+    console.log("Error al iniciar sesión:", error);
+    res.status(400).json({ 
+      success: false, 
+      message: "Error del servidor" 
+    });
+  }
 };
 
 export const cerrarSesion = async (req, res) => {
-	res.clearCookie("token");
-	res.status(200).json({ success: true, message: "Sesión cerrada correctamente" });
+  res.clearCookie("token");
+  res.status(200).json({ 
+    success: true, 
+    message: "Sesión cerrada correctamente" 
+  });
 };
 
 export const olvideContraseña = async (req, res) => {
-	const { email } = req.body;
-	try {
-		const usuario = await Usuario.buscarPorEmail(email);
+  const { email } = req.body;
+  
+  try {
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "El email es requerido" 
+      });
+    }
 
-		if (!usuario) {
-			return res.status(200).json({ 
-				success: true, 
-				message: "Si el email existe, se enviarán instrucciones para restablecer la contraseña" 
-			});
-		}
+    const usuario = await Usuario.buscarPorEmail(email);
 
-		const tokenRestablecimiento = crypto.randomBytes(20).toString("hex");
-		const tokenRestablecimientoExpira = new Date(Date.now() + 1 * 60 * 60 * 1000);
+    if (!usuario) {
+      // Por seguridad, no revelar si el email existe
+      return res.status(200).json({ 
+        success: true, 
+        message: "Si el email existe, se enviarán instrucciones para restablecer la contraseña" 
+      });
+    }
 
-		await Usuario.establecerTokenRestablecimiento(usuario.id, tokenRestablecimiento, tokenRestablecimientoExpira);
+    const tokenRestablecimiento = crypto.randomBytes(20).toString("hex");
+    const tokenRestablecimientoExpira = new Date(Date.now() + 1 * 60 * 60 * 1000);
 
-		// TEMPORAL: Email deshabilitado - solo log
-		await enviarCorreoRestablecimientoContraseña(usuario.email, `${process.env.CLIENT_URL}/restablecer-contraseña/${tokenRestablecimiento}`);
+    await Usuario.establecerTokenRestablecimiento(usuario.id, tokenRestablecimiento, tokenRestablecimientoExpira);
 
-		res.status(200).json({ 
-			success: true, 
-			message: "Si el email existe, se enviarán instrucciones para restablecer la contraseña" 
-		});
-	} catch (error) {
-		console.log("Error en olvideContraseña:", error);
-		res.status(400).json({ success: false, message: error.message });
-	}
+    // Enviar email de restablecimiento
+    await EmailService.sendPasswordResetEmail(usuario.email, tokenRestablecimiento, usuario.nombre);
+
+    res.status(200).json({ 
+      success: true, 
+      message: "Si el email existe, se enviarán instrucciones para restablecer la contraseña" 
+    });
+  } catch (error) {
+    console.log("Error en olvideContraseña:", error);
+    res.status(400).json({ 
+      success: false, 
+      message: "Error del servidor" 
+    });
+  }
 };
 
 export const restablecerContraseña = async (req, res) => {
-	try {
-		const { token } = req.params;
-		const { password } = req.body;
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
 
-		const usuario = await Usuario.buscarPorTokenRestablecimiento(token);
+    if (!password || password.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "La contraseña debe tener al menos 6 caracteres" 
+      });
+    }
 
-		if (!usuario) {
-			return res.status(400).json({ success: false, message: "Token inválido o expirado" });
-		}
+    const usuario = await Usuario.buscarPorTokenRestablecimiento(token);
 
-		const contraseñaHasheada = await bcryptjs.hash(password, 10);
+    if (!usuario) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Token inválido o expirado" 
+      });
+    }
 
-		await Usuario.actualizarContraseña(usuario.id, contraseñaHasheada);
+    const contraseñaHasheada = await bcryptjs.hash(password, 10);
+    await Usuario.actualizarContraseña(usuario.id, contraseñaHasheada);
 
-		// TEMPORAL: Email deshabilitado - solo log
-		await enviarCorreoContraseñaRestablecida(usuario.email);
+    // Enviar confirmación
+    await EmailService.sendPasswordResetConfirmation(usuario.email, usuario.nombre);
 
-		res.status(200).json({ success: true, message: "Contraseña restablecida exitosamente" });
-	} catch (error) {
-		console.log("Error en restablecerContraseña:", error);
-		res.status(400).json({ success: false, message: error.message });
-	}
+    res.status(200).json({ 
+      success: true, 
+      message: "Contraseña restablecida exitosamente" 
+    });
+  } catch (error) {
+    console.log("Error en restablecerContraseña:", error);
+    res.status(400).json({ 
+      success: false, 
+      message: "Error del servidor" 
+    });
+  }
 };
 
 export const verificarAutenticacion = async (req, res) => {
   try {
     console.log('🔐 [AUTH CONTROLLER] Verificando autenticación - usuarioId:', req.usuarioId);
     
-    // ✅ Si no hay usuarioId, significa que no está autenticado
     if (!req.usuarioId || !req.usuario) {
       console.log('❌ [AUTH CONTROLLER] Usuario NO autenticado');
       return res.status(200).json({ 
@@ -303,10 +300,10 @@ export const verificarAutenticacion = async (req, res) => {
       email: req.usuario.email,
       nombre: req.usuario.nombre,
       rol: req.usuario.rol,
-      estaVerificado: req.usuario.estaVerificado,
-      ultimoInicioSesion: req.usuario.ultimoInicioSesion,
-      creadoEn: req.usuario.creadoEn,
-      actualizadoEn: req.usuario.actualizadoEn
+      estaVerificado: req.usuario.estaVerificado || req.usuario.isVerified || false,
+      ultimoInicioSesion: req.usuario.ultimoInicioSesion || req.usuario.lastLogin,
+      creadoEn: req.usuario.creadoEn || req.usuario.createdAt,
+      actualizadoEn: req.usuario.actualizadoEn || req.usuario.updatedAt
     };
 
     console.log('✅ [AUTH CONTROLLER] Usuario autenticado:', usuarioSinContraseña.email);
@@ -316,7 +313,7 @@ export const verificarAutenticacion = async (req, res) => {
     });
   } catch (error) {
     console.log("Error en verificarAutenticacion:", error);
-    res.status(200).json({  
+    res.status(200).json({ 
       success: false, 
       message: "Error de autenticación",
       usuario: null
@@ -331,7 +328,10 @@ export const obtenerPerfil = async (req, res) => {
     const usuario = await Usuario.buscarPorId(req.usuarioId);
     
     if (!usuario) {
-      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+      return res.status(404).json({ 
+        success: false, 
+        message: "Usuario no encontrado" 
+      });
     }
 
     res.status(200).json({
@@ -341,38 +341,41 @@ export const obtenerPerfil = async (req, res) => {
         email: usuario.email,
         nombre: usuario.nombre,
         rol: usuario.rol,
-        estaVerificado: usuario.isVerified,
-        ultimoInicioSesion: usuario.lastLogin,
-        creadoEn: usuario.createdAt,
-        actualizadoEn: usuario.updatedAt
+        estaVerificado: usuario.estaVerificado || usuario.isVerified || false,
+        ultimoInicioSesion: usuario.ultimoInicioSesion || usuario.lastLogin,
+        creadoEn: usuario.creadoEn || usuario.createdAt,
+        actualizadoEn: usuario.actualizadoEn || usuario.updatedAt
       }
     });
   } catch (error) {
     console.log("❌ [AUTH CONTROLLER] Error en obtenerPerfil:", error);
-    res.status(500).json({ success: false, message: "Error del servidor" });
+    res.status(500).json({ 
+      success: false, 
+      message: "Error del servidor" 
+    });
   }
 };
 
 export const obtenerTodosLosUsuarios = async (req, res) => {
-    try {
-        const { limite = 10, pagina = 1 } = req.query;
-        const usuarios = await Usuario.obtenerTodos(parseInt(limite), parseInt(pagina));
+  try {
+    const { limite = 10, pagina = 1 } = req.query;
+    const usuarios = await Usuario.obtenerTodos(parseInt(limite), parseInt(pagina));
 
-        res.status(200).json({
-            success: true,
-            usuarios,
-            paginacion: {
-                limite: parseInt(limite),
-                pagina: parseInt(pagina)
-            }
-        });
-    } catch (error) {
-        console.log("Error al obtener usuarios:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
+    res.status(200).json({
+      success: true,
+      usuarios,
+      paginacion: {
+        limite: parseInt(limite),
+        pagina: parseInt(pagina)
+      }
+    });
+  } catch (error) {
+    console.log("Error al obtener usuarios:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 export const actualizarPerfil = async (req, res) => {
@@ -380,6 +383,13 @@ export const actualizarPerfil = async (req, res) => {
     const { nombre, email } = req.body;
     console.log('🔄 [AUTH CONTROLLER] Actualizando perfil usuario:', req.usuarioId);
     
+    if (!nombre || !email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Nombre y email son requeridos" 
+      });
+    }
+
     const usuarioActualizado = await Usuario.actualizarPerfil(req.usuarioId, {
       nombre,
       email
@@ -393,15 +403,18 @@ export const actualizarPerfil = async (req, res) => {
         email: usuarioActualizado.email,
         nombre: usuarioActualizado.nombre,
         rol: usuarioActualizado.rol,
-        estaVerificado: usuarioActualizado.isVerified,
-        ultimoInicioSesion: usuarioActualizado.lastLogin,
-        creadoEn: usuarioActualizado.createdAt,
-        actualizadoEn: usuarioActualizado.updatedAt
+        estaVerificado: usuarioActualizado.estaVerificado || usuarioActualizado.isVerified || false,
+        ultimoInicioSesion: usuarioActualizado.ultimoInicioSesion || usuarioActualizado.lastLogin,
+        creadoEn: usuarioActualizado.creadoEn || usuarioActualizado.createdAt,
+        actualizadoEn: usuarioActualizado.actualizadoEn || usuarioActualizado.updatedAt
       }
     });
   } catch (error) {
     console.log("❌ [AUTH CONTROLLER] Error en actualizarPerfil:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
 
@@ -409,16 +422,19 @@ export const cambiarContraseña = async (req, res) => {
   try {
     const { contraseñaActual, nuevaContraseña } = req.body;
     console.log('🔄 [AUTH CONTROLLER] Cambiando contraseña usuario:', req.usuarioId);
-    console.log('📨 [AUTH CONTROLLER] Datos recibidos:', { 
-      contraseñaActual: contraseñaActual ? '***' : 'FALTANTE',
-      nuevaContraseña: nuevaContraseña ? '***' : 'FALTANTE'
-    });
     
     if (!contraseñaActual || !nuevaContraseña) {
       console.log('❌ [AUTH CONTROLLER] Campos faltantes');
       return res.status(400).json({ 
         success: false, 
         message: "Todos los campos son requeridos" 
+      });
+    }
+
+    if (nuevaContraseña.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "La nueva contraseña debe tener al menos 6 caracteres" 
       });
     }
 
@@ -454,6 +470,9 @@ export const cambiarContraseña = async (req, res) => {
     });
   } catch (error) {
     console.log("❌ [AUTH CONTROLLER] Error en cambiarContraseña:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 };
