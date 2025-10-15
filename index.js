@@ -20,7 +20,9 @@ import dashboardRoutes from "./routes/dashboardRoutes.js";
 // CONFIGURACIÓN INICIAL
 // ========================
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080; // ← CAMBIADO A 8080
+
+console.log('🔧 INICIANDO SERVIDOR EN PUERTO:', PORT);
 
 // ========================
 // CORS COMPLETAMENTE PERMISIVO
@@ -28,7 +30,7 @@ const PORT = process.env.PORT || 5000;
 console.log('🔓 CONFIGURANDO CORS PERMISIVO...');
 
 app.use(cors({
-  origin: true, // PERMITIR TODOS LOS ORÍGENES
+  origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
@@ -37,14 +39,10 @@ app.use(cors({
     'Cookie', 
     'X-Requested-With',
     'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
-  ],
-  exposedHeaders: ['Set-Cookie']
+    'Origin'
+  ]
 }));
 
-// Manejar preflight OPTIONS explícitamente
 app.options('*', cors());
 
 // ========================
@@ -66,19 +64,19 @@ const limiter = rateLimit({
   max: 500,
   message: { 
     success: false, 
-    message: 'Demasiadas solicitudes desde esta IP, intenta nuevamente en 15 minutos' 
+    message: 'Demasiadas solicitudes' 
   },
   standardHeaders: true,
   legacyHeaders: false
 });
 app.use('/api/', limiter);
 
-// Trust proxy para Railway
+// Trust proxy
 app.set('trust proxy', 1);
 
-// Logging de requests
+// Logging
 app.use((req, res, next) => {
-  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'No origin'}`);
+  console.log(`🌐 ${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
@@ -93,25 +91,29 @@ app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
-// ========================
-// HEALTH CHECK
-// ========================
+// Health Check en raíz también
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "🚀 API de Gestión de Plantas funcionando",
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
 app.get("/api/health", async (req, res) => {
   try {
     const dbStatus = await testConnection();
     
     res.status(200).json({
       success: true,
-      message: "✅ API de Gestión de Plantas funcionando correctamente",
+      message: "✅ API funcionando correctamente",
       timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'development',
-      version: "1.0.0",
+      environment: process.env.NODE_ENV,
       services: {
         database: dbStatus ? "connected" : "disconnected",
         server: "running"
-      },
-      cors: "permissive",
-      origin: req.headers.origin || 'No origin'
+      }
     });
   } catch (error) {
     res.status(500).json({
@@ -122,91 +124,32 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-// Ruta de prueba CORS
-app.get("/api/test-cors", (req, res) => {
-  res.json({
-    success: true,
-    message: "✅ CORS funcionando correctamente",
-    timestamp: new Date().toISOString(),
-    origin: req.headers.origin || 'No origin',
-    cors: "Permisivo - Todos los orígenes permitidos"
-  });
-});
-
-// Ruta específica para probar login CORS
-app.post("/api/auth/test-cors", (req, res) => {
-  res.json({
-    success: true,
-    message: "✅ Ruta de login accesible via CORS",
-    timestamp: new Date().toISOString(),
-    origin: req.headers.origin,
-    method: "POST",
-    cors: "Funcionando"
-  });
-});
-
-// Ruta de salud adicional
-app.get("/api/salud", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "✅ API de Gestión de Plantas funcionando correctamente",
-    timestamp: new Date().toISOString(),
-    version: "1.0.0"
-  });
-});
-
-// ========================
-// MANEJO DE ERRORES
-// ========================
-app.use((err, req, res, next) => {
-  console.error('❌ Error global:', err.message);
-  
-  res.status(err.status || 500).json({
-    success: false,
-    message: 'Error interno del servidor',
-    origin: req.headers.origin
-  });
-});
-
-// 404 Handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: `Ruta no encontrada: ${req.originalUrl}`,
-    origin: req.headers.origin
-  });
-});
-
 // ========================
 // INICIAR SERVIDOR
 // ========================
 app.listen(PORT, '0.0.0.0', async () => {
   console.log("==========================================");
-  console.log("🚀 SERVICIO BACKEND INICIADO CORRECTAMENTE");
+  console.log("🚀 SERVICIO INICIADO EN PUERTO:", PORT);
   console.log("==========================================");
-  console.log("✅ Puerto:", PORT);
-  console.log("🌍 Entorno:", process.env.NODE_ENV || "development");
   
   const dbConnected = await testConnection();
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
-  console.log("🔓 CORS: PERMITIENDO TODOS LOS ORÍGENES");
   
-  console.log("");
-  console.log("🔗 Health Check: https://angelic-compassion.up.railway.app/api/health");
-  console.log("🔗 Test CORS: https://angelic-compassion.up.railway.app/api/test-cors");
-  console.log("🔗 Test Login CORS: https://angelic-compassion.up.railway.app/api/auth/test-cors");
-  console.log("");
-  console.log("🔐 Sistema de gestión de plantas listo para producción!");
+  console.log("🔗 URL: https://angelic-compassion.up.railway.app");
+  console.log("🔗 Health: https://angelic-compassion.up.railway.app/api/health");
   console.log("==========================================");
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM recibido, cerrando servidor...');
-  process.exit(0);
+// Manejo de errores
+app.use((err, req, res, next) => {
+  console.error('❌ Error:', err.message);
+  res.status(500).json({ success: false, message: 'Error interno' });
 });
 
-process.on('SIGINT', () => {
-  console.log('🛑 SIGINT recibido, cerrando servidor...');
-  process.exit(0);
+app.use('*', (req, res) => {
+  res.status(404).json({ 
+    success: false, 
+    message: `Ruta no encontrada: ${req.originalUrl}`,
+    availableRoutes: ['/api/health', '/api/auth', '/api/plantas', '/api/dashboard']
+  });
 });
