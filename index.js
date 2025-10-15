@@ -17,27 +17,41 @@ import mantenimientoRoutes from "./routes/mantenimientoRoutes.js";
 import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
-dotenv.config();
+// ========================
+// CONFIGURACIÓN ENTORNO
+// ========================
+// Solo cargar dotenv en desarrollo (Railway ya inyecta las variables)
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// ========================
-// CONFIGURACIÓN PRODUCCIÓN
-// ========================
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ========================
-// SECURITY MIDDLEWARES - OPTIMIZADOS
+// DIAGNÓSTICO RAILWAY (solo en inicio)
+// ========================
+console.log('🚄 RAILWAY ENVIRONMENT DIAGNOSTIC:');
+console.log('   PORT:', process.env.PORT || '5000 (default)');
+console.log('   NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('   DB_HOST:', process.env.DB_HOST ? '✅ ' + process.env.DB_HOST : '❌ NO CONFIGURADO');
+console.log('   DB_PORT:', process.env.DB_PORT ? '✅ ' + process.env.DB_PORT : '❌ NO CONFIGURADO');
+console.log('   DB_USER:', process.env.DB_USER ? '✅ ' + process.env.DB_USER : '❌ NO CONFIGURADO');
+console.log('   DB_NAME:', process.env.DB_NAME ? '✅ ' + process.env.DB_NAME : '❌ NO CONFIGURADO');
+console.log('   CLIENT_URL:', process.env.CLIENT_URL || 'NO CONFIGURADO');
+
+// ========================
+// SECURITY MIDDLEWARES
 // ========================
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  contentSecurityPolicy: false // Puedes configurar esto más tarde
+  contentSecurityPolicy: false
 }));
 
 app.use(compression({
   level: 6,
-  threshold: 100 * 1024 // Comprimir respuestas > 100KB
+  threshold: 100 * 1024
 }));
 
 app.use(express.json({ limit: '10mb' }));
@@ -45,11 +59,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
 // ========================
-// RATE LIMITING - AJUSTADO PRODUCCIÓN
+// RATE LIMITING
 // ========================
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: isProduction ? 500 : 1000, // Menos límite en producción
+  windowMs: 15 * 60 * 1000,
+  max: isProduction ? 500 : 1000,
   message: {
     success: false,
     message: 'Demasiadas solicitudes desde esta IP, intenta nuevamente en 15 minutos'
@@ -60,14 +74,14 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // ========================
-// CORS CONFIGURATION - SIMPLIFICADA
+// CORS CONFIGURATION
 // ========================
 const allowedOrigins = isProduction 
   ? [
       'https://plantas-frontend.vercel.app',
       'https://plantas-frontend-git-main-nicolas-ignacio-munoz-nunezs-projects.vercel.app',
       'https://plantas-frontend-pe5bmfn2i.vercel.app',
-      process.env.FRONTEND_URL
+      process.env.CLIENT_URL
     ].filter(Boolean)
   : [
       'http://localhost:5173',
@@ -77,12 +91,10 @@ const allowedOrigins = isProduction
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Permitir requests sin origin (mobile apps, postman, etc)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.some(allowedOrigin => 
-      origin === allowedOrigin || 
-      origin.startsWith(allowedOrigin.replace('https://', 'https://'))
+      origin === allowedOrigin
     )) {
       callback(null, true);
     } else {
@@ -95,11 +107,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With']
 }));
 
-// Preflight OPTIONS handling
 app.options('*', cors());
 
 // ========================
-// TRUST PROXY (IMPORTANTE PARA RAILWAY)
+// TRUST PROXY (CRÍTICO PARA RAILWAY)
 // ========================
 app.set('trust proxy', 1);
 
@@ -125,18 +136,28 @@ app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
 // ========================
-// HEALTH CHECK MEJORADO
+// HEALTH CHECK MEJORADO PARA RAILWAY
 // ========================
 app.get("/api/health", async (req, res) => {
   try {
     const dbStatus = await testConnection();
-    res.status(200).json({
-      success: true,
-      message: "✅ API de Gestión de Plantas funcionando correctamente",
+    
+    res.status(dbStatus ? 200 : 503).json({
+      success: dbStatus,
+      message: dbStatus 
+        ? "✅ API de Gestión de Plantas funcionando correctamente" 
+        : "⚠️ API funcionando pero BD no conectada",
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'development',
       version: "1.0.0",
-      database: dbStatus ? "connected" : "disconnected",
+      services: {
+        database: dbStatus ? "connected" : "disconnected",
+        server: "running"
+      },
+      railway: {
+        dbConfigured: !!(process.env.DB_HOST && process.env.DB_NAME),
+        nodeEnv: process.env.NODE_ENV || "not set"
+      },
       uptime: process.uptime()
     });
   } catch (error) {
@@ -149,13 +170,22 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
+// Ruta de salud adicional (mantener compatibilidad)
+app.get("/api/salud", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "✅ API de Gestión de Plantas funcionando correctamente",
+    timestamp: new Date().toISOString(),
+    version: "1.0.0"
+  });
+});
+
 // ========================
-// ERROR HANDLING MEJORADO
+// ERROR HANDLING
 // ========================
 app.use((err, req, res, next) => {
   console.error('❌ Error global:', err.stack);
   
-  // Error de CORS
   if (err.message === 'Not allowed by CORS') {
     return res.status(403).json({
       success: false,
@@ -163,7 +193,6 @@ app.use((err, req, res, next) => {
     });
   }
   
-  // Rate limit error
   if (err.status === 429) {
     return res.status(429).json({
       success: false,
@@ -178,7 +207,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 Handler - DEBE IR AL FINAL
+// 404 Handler
 app.use('*', (req, res) => {
   if (req.originalUrl.startsWith('/api/')) {
     res.status(404).json({
@@ -211,26 +240,41 @@ process.on('SIGINT', () => {
 // ========================
 app.listen(PORT, '0.0.0.0', async () => {
   try {
-    await testConnection();
     console.log("==========================================");
-    console.log("🚀 SERVICIO BACKEND INICIADO CORRECTAMENTE");
+    console.log("🚀 INICIANDO SERVICIO BACKEND EN RAILWAY");
     console.log("==========================================");
+    
+    // Probar conexión a BD
+    const dbConnected = await testConnection();
+    
     console.log("✅ Puerto:", PORT);
     console.log("🌍 Entorno:", process.env.NODE_ENV || "development");
     console.log("🎯 Producción:", isProduction);
     console.log("📊 Orígenes permitidos:", allowedOrigins);
+    console.log("🗄️  Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
     console.log("");
-    console.log("🔗 Health Check: http://localhost:" + PORT + "/api/health");
-    console.log("");
-    console.log("🔐 Sistema de gestión de plantas listo para producción!");
+    
+    if (dbConnected) {
+      console.log("🔗 Health Check: https://tu-app.railway.app/api/health");
+      console.log("🎉 ¡Sistema de gestión de plantas listo para producción!");
+    } else {
+      console.log("⚠️  Servidor iniciado PERO base de datos no conectada");
+      console.log("🔧 Verifica las variables de entorno en Railway Dashboard");
+    }
+    
     console.log("==========================================");
+    
   } catch (error) {
-    console.error("❌ Error crítico iniciando el servidor:", error);
-    console.log('🔧 VARIABLES DE ENTRADA BD:');
-console.log('DB_HOST:', process.env.DB_HOST ? '✅ Configurado' : '❌ Faltante');
-console.log('DB_USER:', process.env.DB_USER ? '✅ Configurado' : '❌ Faltante');
-console.log('DB_NAME:', process.env.DB_NAME ? '✅ Configurado' : '❌ Faltante');
-console.log('DB_PORT:', process.env.DB_PORT || '3306 (default)');
+    console.error("❌ ERROR CRÍTICO INICIANDO EL SERVIDOR:");
+    console.error("   Mensaje:", error.message);
+    
+    // Diagnóstico adicional
+    console.log("🔧 DIAGNÓSTICO FINAL:");
+    console.log("   DB_HOST:", process.env.DB_HOST || "NO CONFIGURADO");
+    console.log("   DB_PORT:", process.env.DB_PORT || "NO CONFIGURADO");
+    console.log("   DB_USER:", process.env.DB_USER || "NO CONFIGURADO");
+    console.log("   DB_NAME:", process.env.DB_NAME || "NO CONFIGURADO");
+    
     process.exit(1);
   }
 });
