@@ -1,37 +1,31 @@
-import nodemailer from 'nodemailer';
+// config/emailConfig.js - VERSIÓN SIMPLIFICADA
+import { SendGridService } from '../services/sendgridService.js';
 
-// Configuración para SendGrid
-export const transporter = nodemailer.createTransport({
-  host: 'smtp.sendgrid.net',
-  port: 587,
-  auth: {
-    user: 'apikey', // ← EXACTAMENTE 'apikey' (texto fijo)
-    pass: process.env.EMAIL_APP_PASSWORD // ← Tu API Key que empieza con SG.
-  },
-  // Configuración para mejor rendimiento
-  connectionTimeout: 10000,
-  socketTimeout: 10000,
-  secure: false // ← Usar TLS (puerto 587)
-});
-
+// Solo para mantener la compatibilidad con tu código existente
 export const verifyEmailConnection = async () => {
   try {
-    await transporter.verify();
-    console.log('✅ CONEXIÓN SENDGRID ESTABLECIDA');
-    console.log('   Servicio: SendGrid');
-    console.log('   Host: smtp.sendgrid.net');
-    console.log('   Estado: Listo para enviar emails');
-    return true;
+    console.log('📧 Probando conexión con SendGrid API...');
+    
+    // Test simple
+    const testResult = await SendGridService.sendVerificationEmail(
+      process.env.EMAIL_FROM_ADDRESS,
+      '000000',
+      'Test Connection'
+    );
+    
+    if (testResult.success) {
+      console.log('✅ SENDGRID API CONEXIÓN EXITOSA');
+      return true;
+    } else {
+      console.log('❌ SENDGRID API ERROR:', testResult.error);
+      return false;
+    }
   } catch (error) {
-    console.error('❌ ERROR CONEXIÓN SENDGRID:');
-    console.error('   Mensaje:', error.message);
-    console.error('   Código:', error.code);
-    console.error('   Verifica:');
-    console.error('     1. API Key en Railway: SG.xxx...');
-    console.error('     2. EMAIL_USER=apikey en Railway');
-    console.error('     3. Sender verificado en SendGrid');
+    console.error('❌ ERROR TESTEANDO SENDGRID:', error.message);
     return false;
   }
 };
 
-export default transporter;
+// Exportar el servicio para uso directo (mantener compatibilidad)
+export { SendGridService as EmailService };
+export default SendGridService;

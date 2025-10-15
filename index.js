@@ -55,74 +55,38 @@ app.use("/api/incidencias", incidenciaRoutes);
 app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
-app.post("/api/test-sendgrid", async (req, res) => {
+
+
+// ✅ AGREGAR RUTA DE TEST EMAIL TEMPORAL
+app.post("/api/test-sendgrid-api", async (req, res) => {
   try {
-    console.log('🧪 TEST SENDGRID - Iniciando...');
+    console.log('🧪 [SENDGRID API TEST] Iniciando...');
     
-    // Importar dinámicamente para evitar ciclos
-    const { EmailService } = await import('./services/emailService.js');
+    const { SendGridService } = await import('./services/sendgridService.js');
     
-    console.log('🧪 Configuración actual:');
-    console.log('   EMAIL_SERVICE:', process.env.EMAIL_SERVICE);
-    console.log('   EMAIL_USER:', process.env.EMAIL_USER);
-    console.log('   EMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? '✅ Configurada' : '❌ Faltante');
+    console.log('🔧 Configuración:');
+    console.log('   EMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? `✅ (${process.env.EMAIL_APP_PASSWORD.length} chars)` : '❌ Faltante');
     console.log('   EMAIL_FROM_ADDRESS:', process.env.EMAIL_FROM_ADDRESS);
     
-    // Test simple de email
-    const result = await EmailService.sendVerificationEmail(
+    const result = await SendGridService.sendVerificationEmail(
       process.env.EMAIL_FROM_ADDRESS, // Enviar a ti mismo
-      '999999', 
+      '123456', 
       'Test User'
     );
     
-    console.log('🧪 Resultado del test:', result);
+    console.log('🧪 Resultado:', result);
     
     res.json({
       success: result.success,
-      message: result.success ? '✅ Email enviado correctamente' : '❌ Error enviando email',
-      result: result,
-      config: {
-        emailService: process.env.EMAIL_SERVICE,
-        emailUser: process.env.EMAIL_USER,
-        emailFrom: process.env.EMAIL_FROM_ADDRESS,
-        apiKeyLength: process.env.EMAIL_APP_PASSWORD ? process.env.EMAIL_APP_PASSWORD.length : 0
-      }
+      message: result.success ? '✅ Email enviado via SendGrid API' : '❌ Error',
+      result: result
     });
     
   } catch (error) {
-    console.error('🧪 ERROR en test:', error);
+    console.error('🧪 ERROR:', error);
     res.status(500).json({
       success: false,
-      error: error.message,
-      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
-    });
-  }
-});
-
-// ✅ AGREGAR RUTA DE TEST EMAIL TEMPORAL
-app.post("/api/test-email", async (req, res) => {
-  try {
-    const { EmailService } = await import("./services/emailService.js");
-    const result = await EmailService.sendVerificationEmail(
-      process.env.EMAIL_USER, // Enviar a ti mismo para prueba
-      '999999', 
-      'Test User'
-    );
-    
-    res.json({ 
-      success: true, 
-      result,
-      config: {
-        emailUser: process.env.EMAIL_USER ? "✅ Configurado" : "❌ Faltante",
-        emailPass: process.env.EMAIL_APP_PASSWORD ? "✅ Configurado" : "❌ Faltante",
-        nodeEnv: process.env.NODE_ENV
-      }
-    });
-  } catch (error) {
-    res.json({ 
-      success: false, 
-      error: error.message,
-      stack: error.stack 
+      error: error.message
     });
   }
 });
