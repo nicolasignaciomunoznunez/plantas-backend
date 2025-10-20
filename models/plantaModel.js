@@ -50,9 +50,14 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
     try {
         const limiteNum = Number(limite);
         const paginaNum = Number(pagina);
+        
+        if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
+            throw new Error('Parámetros de paginación inválidos');
+        }
+        
         const offset = (paginaNum - 1) * limiteNum;
         
-        // Construir WHERE clause dinámicamente
+        // Construir WHERE clause dinámicamente basado en filtros
         let whereClause = 'WHERE 1=1';
         const valores = [];
         
@@ -66,6 +71,9 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             valores.push(filtros.clienteId);
         }
         
+        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
+        
+        // ✅ CORRECCIÓN: Usar parámetros preparados para TODOS los valores
         const query = `
             SELECT p.*, 
                    u.nombre as clienteNombre,
@@ -78,13 +86,19 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             LIMIT ? OFFSET ?
         `;
         
+        // ✅ AGREGAR límite y offset a los valores del array
         valores.push(limiteNum, offset);
         
+        console.log('🔍 [PLANTA MODEL] Query final:', query);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        
         const [plantas] = await pool.execute(query, valores);
+        
+        console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
         return plantas.map(planta => new Planta(planta));
         
     } catch (error) {
-        console.error('❌ Error en obtenerTodas:', error);
+        console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
         throw new Error(`Error al obtener plantas: ${error.message}`);
     }
 }
