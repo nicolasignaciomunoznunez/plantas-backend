@@ -17,17 +17,18 @@ const router = express.Router();
 // Todas las rutas requieren autenticación
 router.use(verificarToken);
 
-// Rutas accesibles para admin y técnicos
-router.post("/", verificarRol(['admin', 'tecnico']), crearPlanta);
-router.get("/", filtrarPlantasPorRol(), obtenerPlantas); // ← Agregar middleware
+// ==================== RUTAS GENERALES DE PLANTAS ====================
+router.get("/", filtrarPlantasPorRol(), obtenerPlantas);
 router.get("/:id", obtenerPlanta);
 router.get("/cliente/:clienteId", obtenerPlantasCliente);
-router.put("/:id", verificarRol(['admin', 'tecnico']), actualizarPlanta);
-router.delete("/:id", verificarRol(['admin']), eliminarPlanta);
 
+// ==================== RUTAS DE GESTIÓN (ADMIN/TÉCNICO) ====================
+router.post("/", verificarRol(['superadmin', 'admin', 'tecnico']), crearPlanta);
+router.put("/:id", verificarRol(['superadmin', 'admin', 'tecnico']), actualizarPlanta);
+router.delete("/:id", verificarRol(['superadmin', 'admin']), eliminarPlanta);
 
-// En routes/plantas.js - agregar estas rutas
-router.post('/asignar', verificarToken, verificarRol(['superadmin', 'admin']), asignarPlantaUsuario);
-router.get('/usuario/:usuarioId', verificarToken, verificarRol(['superadmin', 'admin']), obtenerPlantasUsuario);
+// ==================== RUTAS DE ASIGNACIÓN (SUPERADMIN/ADMIN) ====================
+router.post('/asignar', verificarRol(['superadmin', 'admin']), asignarPlantaUsuario);
+router.get('/usuario/:usuarioId', verificarRol(['superadmin', 'admin']), obtenerPlantasUsuario);
 
 export default router;

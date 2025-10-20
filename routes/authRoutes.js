@@ -1,4 +1,4 @@
-// routes/authRoutes.js - VERSIÓN CORREGIDA
+// routes/authRoutes.js - VERSIÓN CORREGIDA Y COMPLETA
 import express from "express";
 import {
     registrar,
@@ -16,28 +16,31 @@ import {
 } from "../controllers/authController.js";
 import { 
   verificarToken, 
-  verificarTokenOpcional  // ✅ Importar ambas funciones
+  verificarTokenOpcional,
+  verificarRol  // ✅ AGREGAR ESTA IMPORTACIÓN
 } from "../middlewares/verificarToken.js";
 
 const router = express.Router();
 
-// Rutas públicas
+// ==================== RUTAS PÚBLICAS ====================
 router.post("/registrar", registrar);
 router.post("/verificar-email", verificarEmail);
 router.post("/iniciar-sesion", iniciarSesion);
 router.post("/olvide-contraseña", olvideContraseña);
 router.post("/restablecer-contraseña/:token", restablecerContraseña);
-router.put('/perfil', verificarToken, actualizarPerfil);
-router.post('/cambiar-password', verificarToken, cambiarContraseña);
 
+// ==================== RUTAS PROTEGIDAS ====================
 // ✅ RUTA CORREGIDA: Usar middleware OPCIONAL para verificar-autenticacion
 router.get("/verificar-autenticacion", verificarTokenOpcional, verificarAutenticacion);
 
-// Rutas protegidas (requieren autenticación)
+// Perfil de usuario (todos los autenticados)
 router.get("/perfil", verificarToken, obtenerPerfil);
+router.put("/perfil", verificarToken, actualizarPerfil);
+router.post("/cambiar-password", verificarToken, cambiarContraseña);
 router.post("/cerrar-sesion", verificarToken, cerrarSesion);
 
-// En routes/auth.js - agregar estas rutas
+// ==================== RUTAS DE ADMINISTRACIÓN ====================
+// ✅ RUTAS NUEVAS: Gestión de usuarios (solo superadmin/admin)
 router.get('/usuarios', verificarToken, verificarRol(['superadmin', 'admin']), obtenerUsuarios);
 router.put('/usuarios/:usuarioId/rol', verificarToken, verificarRol(['superadmin']), actualizarRolUsuario);
 
