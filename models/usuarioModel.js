@@ -207,35 +207,44 @@ export class Usuario {
     }
 
     // Obtener todos los usuarios (para admin) - MÉTODO CORREGIDO
-    static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
-        try {
-            console.log('🔍 [USUARIO MODEL] obtenerTodos ejecutándose');
-            console.log('📊 Parámetros:', { limite, pagina, rol });
+static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
+    try {
+        console.log('🔍 [USUARIO MODEL] obtenerTodos ejecutándose');
+        console.log('📊 Parámetros originales:', { limite, pagina, rol });
 
-            const offset = (pagina - 1) * limite;
-            let query = `SELECT id, nombre, email, rol, isVerified, lastLogin, createdAt, updatedAt FROM users WHERE 1=1`;
-            const valores = [];
+        // ✅ CONVERTIR EXPLÍCITAMENTE A NÚMEROS
+        const limiteNum = parseInt(limite);
+        const paginaNum = parseInt(pagina);
+        const offset = (paginaNum - 1) * limiteNum;
 
-            if (rol) {
-                query += ` AND rol = ?`;
-                valores.push(rol);
-            }
+        console.log('🔢 Parámetros convertidos:', { limiteNum, paginaNum, offset });
 
-            query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
-            valores.push(limite, offset);
+        let query = `SELECT id, nombre, email, rol, isVerified, lastLogin, createdAt, updatedAt FROM users WHERE 1=1`;
+        const valores = [];
 
-            console.log('📝 Query:', query);
-            console.log('🔢 Valores:', valores);
-
-            const [usuarios] = await pool.execute(query, valores);
-            
-            console.log('✅ Usuarios obtenidos:', usuarios.length);
-            return usuarios.map(usuario => new Usuario(usuario));
-        } catch (error) {
-            console.error('❌ Error en obtenerTodos:', error);
-            throw new Error(`Error obteniendo usuarios: ${error.message}`);
+        if (rol) {
+            query += ` AND rol = ?`;
+            valores.push(rol);
         }
+
+        query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
+        
+        // ✅ PASAR NÚMEROS EXPLÍCITOS
+        valores.push(limiteNum, offset);
+
+        console.log('📝 Query:', query);
+        console.log('🔢 Valores (números):', valores);
+        console.log('🔢 Tipos de valores:', valores.map(v => typeof v));
+
+        const [usuarios] = await pool.execute(query, valores);
+        
+        console.log('✅ Usuarios obtenidos:', usuarios.length);
+        return usuarios.map(usuario => new Usuario(usuario));
+    } catch (error) {
+        console.error('❌ Error en obtenerTodos:', error);
+        throw new Error(`Error obteniendo usuarios: ${error.message}`);
     }
+}
 
     // Eliminar usuario
     static async eliminar(id) {
