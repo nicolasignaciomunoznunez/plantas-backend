@@ -286,7 +286,7 @@ export const verificarAutenticacion = async (req, res) => {
   try {
     console.log('🔐 [AUTH CONTROLLER] Verificando autenticación - usuarioId:', req.usuarioId);
     
-    if (!req.usuarioId || !req.usuario) {
+    if (!req.usuarioId) {
       console.log('❌ [AUTH CONTROLLER] Usuario NO autenticado');
       return res.status(200).json({ 
         success: false, 
@@ -295,18 +295,36 @@ export const verificarAutenticacion = async (req, res) => {
       });
     }
 
+    // ✅ CRÍTICO: Obtener el usuario ACTUALIZADO de la base de datos
+    const usuarioActual = await Usuario.buscarPorId(req.usuarioId);
+    
+    if (!usuarioActual) {
+      console.log('❌ [AUTH CONTROLLER] Usuario no encontrado en BD');
+      return res.status(200).json({ 
+        success: false, 
+        message: "Usuario no encontrado",
+        usuario: null 
+      });
+    }
+
+    console.log('🔐 [AUTH CONTROLLER] Usuario de BD:', {
+      id: usuarioActual.id,
+      email: usuarioActual.email,
+      rol: usuarioActual.rol // ← Este es el rol REAL de la base de datos
+    });
+
     const usuarioSinContraseña = {
-      id: req.usuario.id,
-      email: req.usuario.email,
-      nombre: req.usuario.nombre,
-      rol: req.usuario.rol,
-      estaVerificado: req.usuario.estaVerificado || req.usuario.isVerified || false,
-      ultimoInicioSesion: req.usuario.ultimoInicioSesion || req.usuario.lastLogin,
-      creadoEn: req.usuario.creadoEn || req.usuario.createdAt,
-      actualizadoEn: req.usuario.actualizadoEn || req.usuario.updatedAt
+      id: usuarioActual.id,
+      email: usuarioActual.email,
+      nombre: usuarioActual.nombre,
+      rol: usuarioActual.rol, // ← Usar el rol de la BD, no del req.usuario
+      estaVerificado: usuarioActual.estaVerificado || usuarioActual.isVerified || false,
+      ultimoInicioSesion: usuarioActual.ultimoInicioSesion || usuarioActual.lastLogin,
+      creadoEn: usuarioActual.creadoEn || usuarioActual.createdAt,
+      actualizadoEn: usuarioActual.actualizadoEn || usuarioActual.updatedAt
     };
 
-    console.log('✅ [AUTH CONTROLLER] Usuario autenticado:', usuarioSinContraseña.email);
+    console.log('✅ [AUTH CONTROLLER] Usuario autenticado:', usuarioSinContraseña.email, 'Rol:', usuarioSinContraseña.rol);
     res.status(200).json({ 
       success: true, 
       usuario: usuarioSinContraseña 
