@@ -61,9 +61,10 @@ export const obtenerPlanta = async (req, res) => {
 export const obtenerPlantas = async (req, res) => {
     try {
         const { limite = 50, pagina = 1 } = req.query;
-        const { filtrosPlanta } = req; // ← Obtener filtros del middleware
+        const { filtrosPlanta = {} } = req; // ← AGREGAR = {} para valor por defecto
         
         console.log('🔍 [CONTROLLER] Filtros aplicados:', filtrosPlanta);
+        console.log('👤 [CONTROLLER] Usuario:', req.usuario?.email, 'Rol:', req.usuario?.rol);
         
         // Pasar los filtros al modelo
         const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
@@ -77,7 +78,7 @@ export const obtenerPlantas = async (req, res) => {
             }
         });
     } catch (error) {
-        console.log("Error al obtener plantas:", error);
+        console.log("❌ [CONTROLLER] Error al obtener plantas:", error);
         res.status(500).json({
             success: false,
             message: error.message

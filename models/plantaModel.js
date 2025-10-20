@@ -73,7 +73,7 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         
         console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
         
-        // ✅ CORRECCIÓN: Usar parámetros preparados para TODOS los valores
+        // ✅ CORRECCIÓN: Query bien formateada en UNA línea o con template string correcto
         const query = `
             SELECT p.*, 
                    u.nombre as clienteNombre,
@@ -86,10 +86,10 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             LIMIT ? OFFSET ?
         `;
         
-        // ✅ AGREGAR límite y offset a los valores del array
+        // ✅ AGREGAR límite y offset a los valores
         valores.push(limiteNum, offset);
         
-        console.log('🔍 [PLANTA MODEL] Query final:', query);
+        console.log('🔍 [PLANTA MODEL] Query final:', query.replace(/\s+/g, ' ').trim());
         console.log('🔍 [PLANTA MODEL] Valores:', valores);
         
         const [plantas] = await pool.execute(query, valores);
