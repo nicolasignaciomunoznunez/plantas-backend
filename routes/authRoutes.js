@@ -10,7 +10,9 @@ import {
     verificarAutenticacion,
     obtenerPerfil,
     actualizarPerfil,
-    cambiarContraseña
+    cambiarContraseña,
+    obtenerUsuarios,
+    actualizarRolUsuario
 } from "../controllers/authController.js";
 import { 
   verificarToken, 
@@ -34,5 +36,9 @@ router.get("/verificar-autenticacion", verificarTokenOpcional, verificarAutentic
 // Rutas protegidas (requieren autenticación)
 router.get("/perfil", verificarToken, obtenerPerfil);
 router.post("/cerrar-sesion", verificarToken, cerrarSesion);
+
+// En routes/auth.js - agregar estas rutas
+router.get('/usuarios', verificarToken, verificarRol(['superadmin', 'admin']), obtenerUsuarios);
+router.put('/usuarios/:usuarioId/rol', verificarToken, verificarRol(['superadmin']), actualizarRolUsuario);
 
 export default router;

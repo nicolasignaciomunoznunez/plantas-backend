@@ -257,4 +257,49 @@ export class Usuario {
             throw new Error(`Error al obtener estadísticas: ${error.message}`);
         }
     }
+
+        // En usuarioModel.js - agregar estos métodos
+
+// ✅ Obtener todos los usuarios con paginación
+static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
+  try {
+    const offset = (pagina - 1) * limite;
+    let query = `SELECT * FROM users WHERE 1=1`;
+    const valores = [];
+
+    if (rol) {
+      query += ` AND rol = ?`;
+      valores.push(rol);
+    }
+
+    query += ` ORDER BY nombre LIMIT ? OFFSET ?`;
+    valores.push(limite, offset);
+
+    const [usuarios] = await pool.execute(query, valores);
+    return usuarios.map(usuario => new Usuario(usuario));
+  } catch (error) {
+    throw new Error(`Error obteniendo usuarios: ${error.message}`);
+  }
+}
+
+// ✅ Actualizar rol de usuario
+static async actualizarRol(usuarioId, nuevoRol) {
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE users SET rol = ? WHERE id = ?`,
+      [nuevoRol, usuarioId]
+    );
+
+    if (resultado.affectedRows === 0) {
+      throw new Error('Usuario no encontrado');
+    }
+
+    return await this.buscarPorId(usuarioId);
+  } catch (error) {
+    throw new Error(`Error actualizando rol: ${error.message}`);
+  }
+}
+
+
+
 }

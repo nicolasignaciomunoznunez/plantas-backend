@@ -158,4 +158,96 @@ static async eliminar(id) {
         throw new Error(`Error al eliminar planta: ${error.message}`);
     }
 }
+
+// ✅ Asignar técnico a planta
+static async asignarTecnico(plantaId, tecnicoId) {
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE plants SET tecnicoId = ? WHERE id = ?`,
+      [tecnicoId, plantaId]
+    );
+
+    if (resultado.affectedRows === 0) {
+      throw new Error('Planta no encontrada');
+    }
+
+    return await this.buscarPorId(plantaId);
+  } catch (error) {
+    throw new Error(`Error asignando técnico: ${error.message}`);
+  }
+}
+
+// ✅ Asignar cliente a planta
+static async asignarCliente(plantaId, clienteId) {
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE plants SET clienteId = ? WHERE id = ?`,
+      [clienteId, plantaId]
+    );
+
+    if (resultado.affectedRows === 0) {
+      throw new Error('Planta no encontrada');
+    }
+
+    return await this.buscarPorId(plantaId);
+  } catch (error) {
+    throw new Error(`Error asignando cliente: ${error.message}`);
+  }
+}
+
+// ✅ Desasignar técnico de planta
+static async desasignarTecnico(plantaId) {
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE plants SET tecnicoId = NULL WHERE id = ?`,
+      [plantaId]
+    );
+
+    if (resultado.affectedRows === 0) {
+      throw new Error('Planta no encontrada');
+    }
+
+    return await this.buscarPorId(plantaId);
+  } catch (error) {
+    throw new Error(`Error desasignando técnico: ${error.message}`);
+  }
+}
+
+// ✅ Desasignar cliente de planta
+static async desasignarCliente(plantaId) {
+  try {
+    const [resultado] = await pool.execute(
+      `UPDATE plants SET clienteId = NULL WHERE id = ?`,
+      [plantaId]
+    );
+
+    if (resultado.affectedRows === 0) {
+      throw new Error('Planta no encontrada');
+    }
+
+    return await this.buscarPorId(plantaId);
+  } catch (error) {
+    throw new Error(`Error desasignando cliente: ${error.message}`);
+  }
+}
+
+// ✅ Obtener plantas por técnico
+static async obtenerPorTecnico(tecnicoId) {
+  try {
+    const [plantas] = await pool.execute(
+      `SELECT p.*, u.nombre as clienteNombre 
+       FROM plants p 
+       LEFT JOIN users u ON p.clienteId = u.id 
+       WHERE p.tecnicoId = ? 
+       ORDER BY p.nombre`,
+      [tecnicoId]
+    );
+
+    return plantas.map(planta => new Planta(planta));
+  } catch (error) {
+    throw new Error(`Error obteniendo plantas del técnico: ${error.message}`);
+  }
+}
+
+
 }

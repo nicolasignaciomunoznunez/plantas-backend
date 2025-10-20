@@ -493,4 +493,103 @@ export const cambiarContraseña = async (req, res) => {
       message: error.message 
     });
   }
+
+
+};
+
+// ✅ Obtener todos los usuarios (solo superadmin/admin)
+export const obtenerUsuarios = async (req, res) => {
+  try {
+    console.log('👥 [AUTH CONTROLLER] Obteniendo lista de usuarios');
+
+    // Verificar permisos - solo superadmin y admin pueden ver todos los usuarios
+    if (!['superadmin', 'admin'].includes(req.usuario.rol)) {
+      return res.status(403).json({
+        success: false,
+        message: "No tienes permisos para ver todos los usuarios"
+      });
+    }
+
+    const { limite = 50, pagina = 1, rol } = req.query;
+    
+    // Llamar al modelo para obtener usuarios
+    const usuarios = await Usuario.obtenerTodos(parseInt(limite), parseInt(pagina), rol);
+
+    res.status(200).json({
+      success: true,
+      usuarios: usuarios.map(usuario => ({
+        id: usuario.id,
+        nombre: usuario.nombre,
+        email: usuario.email,
+        rol: usuario.rol,
+        estaVerificado: usuario.estaVerificado || usuario.isVerified || false,
+        ultimoInicioSesion: usuario.ultimoInicioSesion || usuario.lastLogin,
+        createdAt: usuario.creadoEn || usuario.createdAt
+      })),
+      paginacion: {
+        limite: parseInt(limite),
+        pagina: parseInt(pagina)
+      }
+    });
+  } catch (error) {
+    console.log("❌ [AUTH CONTROLLER] Error obteniendo usuarios:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error del servidor al obtener usuarios"
+    });
+  }
+};
+
+// ✅ Actualizar rol de usuario (solo superadmin)
+export const actualizarRolUsuario = async (req, res) => {
+  try {
+    const { usuarioId } = req.params;
+    const { nuevoRol } = req.body;
+
+    console.log('🔄 [AUTH CONTROLLER] Actualizando rol usuario:', { usuarioId, nuevoRol });
+
+    // Solo superadmin puede cambiar roles
+    if (req.usuario.rol !== 'superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: "Solo el superadmin puede cambiar roles de usuarios"
+      });
+    }
+
+    // Validar rol
+    const rolesPermitidos = ['admin', 'tecnico', 'cliente'];
+    if (!rolesPermitidos.includes(nuevoRol)) {
+      return res.status(400).json({
+        success: false,
+        message: "Rol no válido"
+      });
+    }
+
+    // No permitir cambiar el rol del propio superadmin
+    if (parseInt(usuarioId) === req.usuario.id) {
+      return res.status(400).json({
+        success: false,
+        message: "No puedes cambiar tu propio rol"
+      });
+    }
+
+    const usuarioActualizado = await Usuario.actualizarRol(usuarioId, nuevoRol);
+
+    res.status(200).json({
+      success: true,
+      message: "Rol actualizado correctamente",
+      usuario: {
+        id: usuarioActualizado.id,
+        nombre: usuarioActualizado.nombre,
+        email: usuarioActualizado.email,
+        rol: usuarioActualizado.rol
+      }
+    });
+  } catch (error) {
+    console.log("❌ [AUTH CONTROLLER] Error actualizando rol:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
