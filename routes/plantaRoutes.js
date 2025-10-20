@@ -8,7 +8,7 @@ import {
     eliminarPlanta
 } from "../controllers/plantaController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
-import { filtrarPlantasPorRol } from "../middlewares/verificarPlantRol.js";
+import { filtrarPlantasPorRol } from "../middlewares/verificarPlantaRol.js";
 
 const router = express.Router();
 
