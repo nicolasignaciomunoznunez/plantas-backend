@@ -2,8 +2,16 @@
 export const filtrarPlantasPorRol = () => {
   return async (req, res, next) => {
     try {
+
+            console.log('🔍 [FILTER MIDDLEWARE] Iniciando - usuarioId:', req.usuarioId);
       const usuario = await Usuario.buscarPorId(req.usuarioId);
-      
+
+        console.log('🔍 [FILTER MIDDLEWARE] Usuario encontrado:', usuario ? {
+        id: usuario.id,
+        email: usuario.email,
+        rol: usuario.rol
+      } : 'NO ENCONTRADO');
+
       if (!usuario) {
         return res.status(404).json({
           success: false,
