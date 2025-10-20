@@ -46,6 +46,7 @@ export class Planta {
 
 
 // Obtener todas las plantas - CORREGIDO
+// En models/plantaModel.js - método obtenerTodas (VERSIÓN ALTERNATIVA)
 static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
     try {
         const limiteNum = Number(limite);
@@ -59,21 +60,18 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         
         // Construir WHERE clause dinámicamente basado en filtros
         let whereClause = 'WHERE 1=1';
-        const valores = [];
         
         if (filtros.tecnicoId) {
-            whereClause += ' AND p.tecnicoId = ?';
-            valores.push(filtros.tecnicoId);
+            whereClause += ` AND p.tecnicoId = ${filtros.tecnicoId}`;
         }
         
         if (filtros.clienteId) {
-            whereClause += ' AND p.clienteId = ?';
-            valores.push(filtros.clienteId);
+            whereClause += ` AND p.clienteId = ${filtros.clienteId}`;
         }
         
-        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
+        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause });
         
-        // ✅ CORRECCIÓN: Query bien formateada en UNA línea o con template string correcto
+        // ✅ SOLUCIÓN: Usar template literals para TODO (sin parámetros preparados)
         const query = `
             SELECT p.*, 
                    u.nombre as clienteNombre,
@@ -83,16 +81,13 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             LEFT JOIN users ut ON p.tecnicoId = ut.id
             ${whereClause}
             ORDER BY p.nombre 
-            LIMIT ? OFFSET ?
+            LIMIT ${limiteNum} OFFSET ${offset}
         `;
         
-        // ✅ AGREGAR límite y offset a los valores
-        valores.push(limiteNum, offset);
+        console.log('🔍 [PLANTA MODEL] Query final:', query);
         
-        console.log('🔍 [PLANTA MODEL] Query final:', query.replace(/\s+/g, ' ').trim());
-        console.log('🔍 [PLANTA MODEL] Valores:', valores);
-        
-        const [plantas] = await pool.execute(query, valores);
+        // ✅ Ejecutar sin parámetros (ya están en el query)
+        const [plantas] = await pool.execute(query);
         
         console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
         return plantas.map(planta => new Planta(planta));
