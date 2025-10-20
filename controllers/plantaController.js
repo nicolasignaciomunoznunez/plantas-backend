@@ -1,4 +1,5 @@
 import { Planta } from "../models/plantaModel.js";
+import { Usuario } from "../models/usuarioModel.js";
 
 
 
