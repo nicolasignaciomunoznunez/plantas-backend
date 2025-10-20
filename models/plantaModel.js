@@ -46,38 +46,41 @@ export class Planta {
 
 
 // Obtener todas las plantas - CORREGIDO
-// Obtener todas las plantas - CORREGIDO
-static async obtenerTodas(limite = 10, pagina = 1) {
+static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
     try {
-        // Convertir explícitamente a números y validar
         const limiteNum = Number(limite);
         const paginaNum = Number(pagina);
-        
-        if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
-            throw new Error('Parámetros de paginación inválidos');
-        }
-        
         const offset = (paginaNum - 1) * limiteNum;
         
-        console.log('📊 Ejecutando query con LIMIT:', limiteNum, 'OFFSET:', offset);
+        // Construir WHERE clause dinámicamente
+        let whereClause = 'WHERE 1=1';
+        const valores = [];
         
-        // ✅ SOLUCIÓN: Usar template literals pero con números validados
+        if (filtros.tecnicoId) {
+            whereClause += ' AND p.tecnicoId = ?';
+            valores.push(filtros.tecnicoId);
+        }
+        
+        if (filtros.clienteId) {
+            whereClause += ' AND p.clienteId = ?';
+            valores.push(filtros.clienteId);
+        }
+        
         const query = `
-            SELECT p.*, u.nombre as clienteNombre 
+            SELECT p.*, 
+                   u.nombre as clienteNombre,
+                   ut.nombre as tecnicoNombre
             FROM plants p 
             LEFT JOIN users u ON p.clienteId = u.id 
+            LEFT JOIN users ut ON p.tecnicoId = ut.id
+            ${whereClause}
             ORDER BY p.nombre 
-            LIMIT ${limiteNum} OFFSET ${offset}
+            LIMIT ? OFFSET ?
         `;
         
-        console.log('🔍 Query completa:', query);
+        valores.push(limiteNum, offset);
         
-        // ✅ SOLUCIÓN: Ejecutar sin parámetros (ya están en el query)
-        const [plantas] = await pool.execute(query);
-        
-        console.log('✅ Plantas encontradas en BD:', plantas.length);
-        console.log('📝 IDs encontrados:', plantas.map(p => p.id));
-        
+        const [plantas] = await pool.execute(query, valores);
         return plantas.map(planta => new Planta(planta));
         
     } catch (error) {

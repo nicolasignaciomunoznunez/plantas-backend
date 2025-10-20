@@ -127,6 +127,13 @@ export const verificarRol = (rolesPermitidos = []) => {
         });
       }
 
+      // ✅ SUPERADMIN tiene acceso total sin importar rolesPermitidos
+      if (usuario.rol === 'superadmin') {
+        console.log('✅ [SUPERADMIN] Acceso total concedido');
+        return next();
+      }
+
+      // ✅ Para otros roles, verificar si están en los permitidos
       if (!rolesPermitidos.includes(usuario.rol)) {
         return res.status(403).json({
           success: false,
@@ -134,6 +141,7 @@ export const verificarRol = (rolesPermitidos = []) => {
         });
       }
 
+      console.log(`✅ [${usuario.rol}] Acceso concedido para roles:`, rolesPermitidos);
       next();
     } catch (error) {
       console.log("Error en verificación de rol:", error);

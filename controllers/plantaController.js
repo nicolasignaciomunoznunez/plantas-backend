@@ -1,5 +1,6 @@
 import { Planta } from "../models/plantaModel.js";
-import { pool } from "../db/connectDB.js";
+
+
 
 export const crearPlanta = async (req, res) => {
     try {
@@ -59,11 +60,13 @@ export const obtenerPlanta = async (req, res) => {
 
 export const obtenerPlantas = async (req, res) => {
     try {
-        const { limite = 50, pagina = 1 } = req.query; // Cambia 10 por 50
+        const { limite = 50, pagina = 1 } = req.query;
+        const { filtrosPlanta } = req; // ← Obtener filtros del middleware
         
-        console.log('📥 Query params recibidos:', { limite, pagina });
+        console.log('🔍 [CONTROLLER] Filtros aplicados:', filtrosPlanta);
         
-        const plantas = await Planta.obtenerTodas(limite, pagina);
+        // Pasar los filtros al modelo
+        const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
 
         res.status(200).json({
             success: true,
