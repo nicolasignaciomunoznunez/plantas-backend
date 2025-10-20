@@ -1,3 +1,5 @@
+import { Usuario } from "../models/usuarioModel.js";
+
 // ✅ NUEVO: Middleware para filtrar plantas según el rol del usuario
 export const filtrarPlantasPorRol = () => {
   return async (req, res, next) => {
