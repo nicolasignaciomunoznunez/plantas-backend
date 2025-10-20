@@ -210,35 +210,30 @@ export class Usuario {
 static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
     try {
         console.log('🔍 [USUARIO MODEL] obtenerTodos ejecutándose');
-        console.log('📊 Parámetros originales:', { limite, pagina, rol });
 
-        // ✅ CONVERTIR EXPLÍCITAMENTE A NÚMEROS
-        const limiteNum = parseInt(limite);
-        const paginaNum = parseInt(pagina);
+        // ✅ VALIDACIÓN Y SANITIZACIÓN DE PARÁMETROS
+        const limiteNum = Math.max(1, Math.min(100, parseInt(limite) || 50)); // Máximo 100
+        const paginaNum = Math.max(1, parseInt(pagina) || 1);
         const offset = (paginaNum - 1) * limiteNum;
 
-        console.log('🔢 Parámetros convertidos:', { limiteNum, paginaNum, offset });
+        console.log('🔢 Parámetros sanitizados:', { limiteNum, paginaNum, offset });
 
         let query = `SELECT id, nombre, email, rol, isVerified, lastLogin, createdAt, updatedAt FROM users WHERE 1=1`;
         const valores = [];
 
-        if (rol) {
+        if (rol && ['superadmin', 'admin', 'tecnico', 'cliente'].includes(rol)) {
             query += ` AND rol = ?`;
             valores.push(rol);
         }
 
-        query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
+        // ✅ LIMIT/OFFSET SEGUROS (números validados)
+        query += ` ORDER BY createdAt DESC LIMIT ${limiteNum} OFFSET ${offset}`;
+
+        console.log('📝 Query ejecutada:', query);
         
-        // ✅ PASAR NÚMEROS EXPLÍCITOS
-        valores.push(limiteNum, offset);
-
-        console.log('📝 Query:', query);
-        console.log('🔢 Valores (números):', valores);
-        console.log('🔢 Tipos de valores:', valores.map(v => typeof v));
-
         const [usuarios] = await pool.execute(query, valores);
         
-        console.log('✅ Usuarios obtenidos:', usuarios.length);
+        console.log('✅ Usuarios obtenidos correctamente:', usuarios.length);
         return usuarios.map(usuario => new Usuario(usuario));
     } catch (error) {
         console.error('❌ Error en obtenerTodos:', error);

@@ -502,7 +502,7 @@ export const obtenerUsuarios = async (req, res) => {
   try {
     console.log('👥 [AUTH CONTROLLER] Obteniendo lista de usuarios');
 
-    // Verificar permisos - solo superadmin y admin pueden ver todos los usuarios
+    // Verificar permisos
     if (!['superadmin', 'admin'].includes(req.usuario.rol)) {
       return res.status(403).json({
         success: false,
@@ -512,8 +512,19 @@ export const obtenerUsuarios = async (req, res) => {
 
     const { limite = 50, pagina = 1, rol } = req.query;
     
-    // Llamar al modelo para obtener usuarios
-    const usuarios = await Usuario.obtenerTodos(parseInt(limite), parseInt(pagina), rol);
+    // ✅ SANITIZACIÓN COMPLETA DE PARÁMETROS
+    const limiteNum = Math.max(1, Math.min(100, parseInt(limite) || 50));
+    const paginaNum = Math.max(1, parseInt(pagina) || 1);
+    const rolProcesado = (rol && rol !== '' && ['admin', 'tecnico', 'cliente'].includes(rol)) ? rol : null;
+
+    console.log('📊 [AUTH CONTROLLER] Parámetros sanitizados:', {
+      limite: limiteNum,
+      pagina: paginaNum, 
+      rol: rolProcesado
+    });
+
+    // ✅ LLAMADA SEGURA AL MODELO
+    const usuarios = await Usuario.obtenerTodos(limiteNum, paginaNum, rolProcesado);
 
     res.status(200).json({
       success: true,
@@ -527,8 +538,8 @@ export const obtenerUsuarios = async (req, res) => {
         createdAt: usuario.creadoEn || usuario.createdAt
       })),
       paginacion: {
-        limite: parseInt(limite),
-        pagina: parseInt(pagina)
+        limite: limiteNum,
+        pagina: paginaNum
       }
     });
   } catch (error) {
