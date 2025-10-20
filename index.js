@@ -201,9 +201,9 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
   
   // ✅ VERIFICAR CONEXIÓN DE EMAIL AL INICIAR
-  console.log("📧 Verificando configuración de email...");
-  const emailConnected = await verifyEmailConnection();
-  console.log("📧 Email service:", emailConnected ? "✅ CONECTADO" : "❌ ERROR");
+ // console.log("📧 Verificando configuración de email...");
+ // const emailConnected = await verifyEmailConnection();
+ // console.log("📧 Email service:", emailConnected ? "✅ CONECTADO" : "❌ ERROR");
   
   console.log("🌍 Entorno:", process.env.NODE_ENV);
   console.log("🔗 El dominio debería funcionar ahora");

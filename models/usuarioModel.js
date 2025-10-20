@@ -206,22 +206,34 @@ export class Usuario {
         }
     }
 
-    // Obtener todos los usuarios (para admin)
-    static async obtenerTodos(limite = 10, pagina = 1) {
+    // Obtener todos los usuarios (para admin) - MÉTODO CORREGIDO
+    static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
         try {
-            const offset = (pagina - 1) * limite;
-            
-            const [usuarios] = await pool.execute(
-                `SELECT id, nombre, email, rol, isVerified, lastLogin, createdAt, updatedAt 
-                 FROM users 
-                 ORDER BY createdAt DESC 
-                 LIMIT ? OFFSET ?`,
-                [limite, offset]
-            );
+            console.log('🔍 [USUARIO MODEL] obtenerTodos ejecutándose');
+            console.log('📊 Parámetros:', { limite, pagina, rol });
 
+            const offset = (pagina - 1) * limite;
+            let query = `SELECT id, nombre, email, rol, isVerified, lastLogin, createdAt, updatedAt FROM users WHERE 1=1`;
+            const valores = [];
+
+            if (rol) {
+                query += ` AND rol = ?`;
+                valores.push(rol);
+            }
+
+            query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
+            valores.push(limite, offset);
+
+            console.log('📝 Query:', query);
+            console.log('🔢 Valores:', valores);
+
+            const [usuarios] = await pool.execute(query, valores);
+            
+            console.log('✅ Usuarios obtenidos:', usuarios.length);
             return usuarios.map(usuario => new Usuario(usuario));
         } catch (error) {
-            throw new Error(`Error al obtener usuarios: ${error.message}`);
+            console.error('❌ Error en obtenerTodos:', error);
+            throw new Error(`Error obteniendo usuarios: ${error.message}`);
         }
     }
 
@@ -258,48 +270,21 @@ export class Usuario {
         }
     }
 
-        // En usuarioModel.js - agregar estos métodos
+    // Actualizar rol de usuario
+    static async actualizarRol(usuarioId, nuevoRol) {
+        try {
+            const [resultado] = await pool.execute(
+                `UPDATE users SET rol = ? WHERE id = ?`,
+                [nuevoRol, usuarioId]
+            );
 
-// ✅ Obtener todos los usuarios con paginación
-static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
-  try {
-    const offset = (pagina - 1) * limite;
-    let query = `SELECT * FROM users WHERE 1=1`;
-    const valores = [];
+            if (resultado.affectedRows === 0) {
+                throw new Error('Usuario no encontrado');
+            }
 
-    if (rol) {
-      query += ` AND rol = ?`;
-      valores.push(rol);
+            return await this.buscarPorId(usuarioId);
+        } catch (error) {
+            throw new Error(`Error actualizando rol: ${error.message}`);
+        }
     }
-
-    query += ` ORDER BY nombre LIMIT ? OFFSET ?`;
-    valores.push(limite, offset);
-
-    const [usuarios] = await pool.execute(query, valores);
-    return usuarios.map(usuario => new Usuario(usuario));
-  } catch (error) {
-    throw new Error(`Error obteniendo usuarios: ${error.message}`);
-  }
-}
-
-// ✅ Actualizar rol de usuario
-static async actualizarRol(usuarioId, nuevoRol) {
-  try {
-    const [resultado] = await pool.execute(
-      `UPDATE users SET rol = ? WHERE id = ?`,
-      [nuevoRol, usuarioId]
-    );
-
-    if (resultado.affectedRows === 0) {
-      throw new Error('Usuario no encontrado');
-    }
-
-    return await this.buscarPorId(usuarioId);
-  } catch (error) {
-    throw new Error(`Error actualizando rol: ${error.message}`);
-  }
-}
-
-
-
 }
