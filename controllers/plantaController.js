@@ -293,3 +293,141 @@ export const obtenerPlantasUsuario = async (req, res) => {
     });
   }
 };
+
+// ✅ Obtener planta completa con técnicos y clientes
+export const obtenerPlantaCompleta = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    console.log('🔍 [PLANTA CONTROLLER] Obteniendo planta completa:', id);
+
+    const plantaCompleta = await Planta.obtenerPlantasCompletas(id);
+
+    if (!plantaCompleta) {
+      return res.status(404).json({
+        success: false,
+        message: "Planta no encontrada"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      planta: plantaCompleta
+    });
+
+  } catch (error) {
+    console.log("❌ [PLANTA CONTROLLER] Error obteniendo planta completa:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ✅ Asignar múltiples técnicos a una planta
+export const asignarMultiplesTecnicos = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tecnicosIds } = req.body;
+
+    console.log('👥 [PLANTA CONTROLLER] Asignando múltiples técnicos:', { plantaId: id, tecnicosIds });
+
+    // Validar datos
+    if (!tecnicosIds || !Array.isArray(tecnicosIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "Lista de técnicos es requerida"
+      });
+    }
+
+    // Asignar múltiples técnicos
+    const plantaActualizada = await Planta.asignarTecnicos(id, tecnicosIds);
+
+    res.status(200).json({
+      success: true,
+      message: `${tecnicosIds.length} técnicos asignados correctamente a la planta`,
+      planta: plantaActualizada
+    });
+
+  } catch (error) {
+    console.log("❌ [PLANTA CONTROLLER] Error asignando múltiples técnicos:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ✅ Asignar múltiples clientes a una planta
+export const asignarMultiplesClientes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { clientesIds } = req.body;
+
+    console.log('👥 [PLANTA CONTROLLER] Asignando múltiples clientes:', { plantaId: id, clientesIds });
+
+    // Validar datos
+    if (!clientesIds || !Array.isArray(clientesIds)) {
+      return res.status(400).json({
+        success: false,
+        message: "Lista de clientes es requerida"
+      });
+    }
+
+    // Asignar múltiples clientes
+    const plantaActualizada = await Planta.asignarClientes(id, clientesIds);
+
+    res.status(200).json({
+      success: true,
+      message: `${clientesIds.length} clientes asignados correctamente a la planta`,
+      planta: plantaActualizada
+    });
+
+  } catch (error) {
+    console.log("❌ [PLANTA CONTROLLER] Error asignando múltiples clientes:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ✅ Obtener todas las plantas con relaciones completas
+export const obtenerPlantasCompletas = async (req, res) => {
+  try {
+    const { limite = 50, pagina = 1 } = req.query;
+
+    console.log('🔍 [PLANTA CONTROLLER] Obteniendo todas las plantas completas');
+
+    // Obtener plantas básicas
+    const plantas = await Planta.obtenerTodas(limite, pagina);
+
+    // Enriquecer cada planta con técnicos y clientes
+    const plantasCompletas = await Promise.all(
+      plantas.map(async (planta) => {
+        try {
+          return await Planta.obtenerPlantasCompletas(planta.id);
+        } catch (error) {
+          console.error(`Error obteniendo planta completa ${planta.id}:`, error);
+          return planta; // Retornar planta básica en caso de error
+        }
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      plantas: plantasCompletas,
+      paginacion: {
+        limite: parseInt(limite),
+        pagina: parseInt(pagina)
+      }
+    });
+
+  } catch (error) {
+    console.log("❌ [PLANTA CONTROLLER] Error obteniendo plantas completas:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
