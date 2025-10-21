@@ -210,28 +210,39 @@ export const descargarReporte = async (req, res) => {
         }
 
         // ✅ CALCULAR FECHAS SEGÚN PERÍODO
-        const fechaFin = new Date(reporte.fecha);
-        const fechaInicio = new Date(fechaFin);
-        
-        switch(reporte.periodo) {
-            case 'diario':
-                fechaInicio.setDate(fechaInicio.getDate() - 1);
-                break;
-            case 'semanal':
-                fechaInicio.setDate(fechaInicio.getDate() - 7);
-                break;
-            case 'mensual':
-                fechaInicio.setMonth(fechaInicio.getMonth() - 1);
-                break;
-            case 'trimestral':
-                fechaInicio.setMonth(fechaInicio.getMonth() - 3);
-                break;
-            case 'anual':
-                fechaInicio.setFullYear(fechaInicio.getFullYear() - 1);
-                break;
-            default:
-                fechaInicio.setMonth(fechaInicio.getMonth() - 1); // mensual por defecto
-        }
+const fechaFin = new Date(reporte.fecha);
+const fechaInicio = new Date(fechaFin);
+
+// ⚠️ PROBLEMA: fechaFin termina a las 00:00 del día del reporte
+// SOLUCIÓN: fechaFin debe terminar al FINAL del día del reporte
+fechaFin.setHours(23, 59, 59, 999); // ← FIN del día
+
+switch(reporte.periodo) {
+    case 'diario':
+        fechaInicio.setDate(fechaInicio.getDate() - 1);
+        fechaInicio.setHours(0, 0, 0, 0); // ← INICIO del día anterior
+        break;
+    case 'semanal':
+        fechaInicio.setDate(fechaInicio.getDate() - 7);
+        fechaInicio.setHours(0, 0, 0, 0);
+        break;
+    case 'mensual':
+        fechaInicio.setMonth(fechaInicio.getMonth() - 1);
+        fechaInicio.setHours(0, 0, 0, 0);
+        break;
+    case 'trimestral':
+        fechaInicio.setMonth(fechaInicio.getMonth() - 3);
+        fechaInicio.setHours(0, 0, 0, 0);
+        break;
+    case 'anual':
+        fechaInicio.setFullYear(fechaInicio.getFullYear() - 1);
+        fechaInicio.setHours(0, 0, 0, 0);
+        break;
+    default:
+        fechaInicio.setMonth(fechaInicio.getMonth() - 1);
+        fechaInicio.setHours(0, 0, 0, 0);
+}
+
 
         // ✅ OBTENER DATOS FILTRADOS - VERSIÓN CORREGIDA
         console.log('🔍 BUSCANDO DATOS PARA REPORTE:', {
