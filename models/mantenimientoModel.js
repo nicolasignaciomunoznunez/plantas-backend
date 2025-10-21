@@ -295,12 +295,12 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
 
 
 
-    static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
+ static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
     try {
         const query = `
-            SELECT m.*, t.nombre as tecnicoNombre, p.nombre as plantaNombre 
+            SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
             FROM mantenimientos m 
-            LEFT JOIN users t ON m.tecnicoId = t.id 
+            LEFT JOIN users u ON m.userId = u.id  // ← CAMBIAR t por u y tecnicoId por userId
             LEFT JOIN plants p ON m.plantId = p.id 
             WHERE m.plantId = ? 
             AND m.fechaProgramada BETWEEN ? AND ?
@@ -317,7 +317,7 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
         
         console.log('🔧 [MODEL] Mantenimientos encontrados:', mantenimientos.length);
         
-        return mantenimientos;
+        return mantenimientos.map(mantenimiento => new Mantenimiento(mantenimiento));
     } catch (error) {
         throw new Error(`Error al obtener mantenimientos por planta y rango de fechas: ${error.message}`);
     }
