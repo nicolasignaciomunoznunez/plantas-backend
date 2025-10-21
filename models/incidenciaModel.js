@@ -245,4 +245,40 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             throw new Error(`Error al eliminar incidencia: ${error.message}`);
         }
     }
-} // ✅ AQUÍ ESTÁ LA LLAVE DE CIERRE QUE FALTABA
+
+
+    // AGREGAR AL MODELO Incidencia (después del método obtenerPorPlanta)
+
+// Obtener incidencias por planta y rango de fechas - NUEVO MÉTODO
+static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
+    try {
+        const query = `
+            SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
+            FROM incidencias i 
+            LEFT JOIN users u ON i.userId = u.id 
+            LEFT JOIN plants p ON i.plantId = p.id 
+            WHERE i.plantId = ? 
+            AND i.fechaReporte BETWEEN ? AND ?
+            ORDER BY i.fechaReporte DESC
+        `;
+        
+        const parametros = [plantId, fechaInicio, fechaFin];
+        
+        console.log('🔍 [MODEL] Query obtenerPorPlantaYRangoFechas:', { 
+            query, 
+            plantId, 
+            fechaInicio: fechaInicio.toISOString(), 
+            fechaFin: fechaFin.toISOString() 
+        });
+        
+        const [incidencias] = await pool.execute(query, parametros);
+
+        console.log('📊 [MODEL] Incidencias encontradas:', incidencias.length);
+        
+        return incidencias.map(incidencia => new Incidencia(incidencia));
+    } catch (error) {
+        throw new Error(`Error al obtener incidencias por planta y rango de fechas: ${error.message}`);
+    }
+}
+
+} 

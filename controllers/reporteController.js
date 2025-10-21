@@ -6,6 +6,7 @@ import { Mantenimiento } from "../models/mantenimientoModel.js";
 import { Usuario } from "../models/usuarioModel.js"; 
 
 import PDFDocument from 'pdfkit'; 
+
 export const crearReporte = async (req, res) => {
     try {
         const { plantId, tipo, descripcion, periodo, titulo } = req.body;
@@ -232,13 +233,57 @@ export const descargarReporte = async (req, res) => {
                 fechaInicio.setMonth(fechaInicio.getMonth() - 1); // mensual por defecto
         }
 
-        // ✅ OBTENER Y FILTRAR DATOS SEGÚN TIPO Y PERÍODO
-        let datosFiltrados = await obtenerDatosFiltrados(
-            reporte.plantId, 
-            reporte.tipo, 
-            fechaInicio, 
-            fechaFin
-        );
+        // ✅ OBTENER DATOS FILTRADOS - VERSIÓN CORREGIDA
+        console.log('🔍 BUSCANDO DATOS PARA REPORTE:', {
+            plantId: reporte.plantId,
+            tipo: reporte.tipo,
+            periodo: reporte.periodo,
+            fechaInicio: fechaInicio.toISOString(),
+            fechaFin: fechaFin.toISOString()
+        });
+
+        const datosFiltrados = {
+            incidencias: [],
+            mantenimientos: [],
+            metricas: null
+        };
+
+        try {
+            // ✅ OBTENER INCIDENCIAS USANDO EL NUEVO MÉTODO
+            datosFiltrados.incidencias = await Incidencia.obtenerPorPlantaYRangoFechas(
+                reporte.plantId, 
+                fechaInicio, 
+                fechaFin
+            );
+            
+            // ✅ OBTENER MANTENIMIENTOS (filtro manual por ahora)
+            const todosMantenimientos = await Mantenimiento.obtenerPorPlanta(reporte.plantId);
+            datosFiltrados.mantenimientos = todosMantenimientos.filter(mantenimiento => {
+                const fechaMantenimiento = new Date(mantenimiento.fechaProgramada);
+                return fechaMantenimiento >= fechaInicio && fechaMantenimiento <= fechaFin;
+            });
+
+            // ✅ OBTENER MÉTRICAS TÉCNICAS
+            if (reporte.tipo === 'rendimiento' || reporte.tipo === 'calidad' || reporte.tipo === 'general') {
+                datosFiltrados.metricas = await obtenerMetricasTecnicas(reporte.plantId, fechaInicio, fechaFin);
+            }
+
+            console.log('📊 DATOS OBTENIDOS PARA PDF:', {
+                totalIncidencias: datosFiltrados.incidencias.length,
+                totalMantenimientos: datosFiltrados.mantenimientos.length,
+                tieneMetricas: !!datosFiltrados.metricas,
+                // Mostrar algunas incidencias para debug
+                incidenciasSample: datosFiltrados.incidencias.slice(0, 3).map(i => ({
+                    id: i.id,
+                    titulo: i.titulo,
+                    fechaReporte: i.fechaReporte,
+                    estado: i.estado
+                }))
+            });
+
+        } catch (error) {
+            console.error('❌ Error al obtener datos filtrados:', error);
+        }
 
         // Configurar respuesta PDF
         res.setHeader('Content-Type', 'application/pdf');
@@ -281,43 +326,6 @@ export const descargarReporte = async (req, res) => {
         });
     }
 };
-
-// ✅ FUNCIÓN PARA OBTENER DATOS FILTRADOS
-async function obtenerDatosFiltrados(plantId, tipo, fechaInicio, fechaFin) {
-    const datos = {
-        incidencias: [],
-        mantenimientos: [],
-        metricas: null
-    };
-
-    try {
-        // Obtener todas las incidencias y mantenimientos de la planta
-        const todasIncidencias = await Incidencia.obtenerPorPlanta(plantId);
-        const todosMantenimientos = await Mantenimiento.obtenerPorPlanta(plantId);
-
-        // ✅ FILTRAR POR FECHA (PERÍODO)
-        datos.incidencias = todasIncidencias.filter(incidencia => {
-            const fechaIncidencia = new Date(incidencia.fechaReporte);
-            return fechaIncidencia >= fechaInicio && fechaIncidencia <= fechaFin;
-        });
-
-        datos.mantenimientos = todosMantenimientos.filter(mantenimiento => {
-            const fechaMantenimiento = new Date(mantenimiento.fechaProgramada);
-            return fechaMantenimiento >= fechaInicio && fechaMantenimiento <= fechaFin;
-        });
-
-        // ✅ OBTENER MÉTRICAS TÉCNICAS PARA REPORTES ESPECÍFICOS
-        if (tipo === 'rendimiento' || tipo === 'calidad' || tipo === 'general') {
-            datos.metricas = await obtenerMetricasTecnicas(plantId, fechaInicio, fechaFin);
-        }
-
-        return datos;
-
-    } catch (error) {
-        console.error('Error al obtener datos filtrados:', error);
-        return datos;
-    }
-}
 
 // ✅ FUNCIÓN PARA OBTENER MÉTRICAS TÉCNICAS
 async function obtenerMetricasTecnicas(plantId, fechaInicio, fechaFin) {
