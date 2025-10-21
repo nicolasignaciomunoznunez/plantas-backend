@@ -203,8 +203,25 @@ export const asignarPlantaUsuario = async (req, res) => {
     if (accion === 'asignar') {
       // Asignar planta según el rol del usuario
       if (usuario.rol === 'tecnico') {
-        plantaActualizada = await Planta.asignarTecnico(plantaId, usuarioId);
+        // ✅ TÉCNICO: Usar sistema muchos-a-muchos
+        const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
+        const tecnicosActuales = plantaCompleta?.tecnicos?.map(t => t.id) || [];
+        
+        // Si el técnico ya está asignado, no hacer nada
+        if (tecnicosActuales.includes(parseInt(usuarioId))) {
+          return res.status(400).json({
+            success: false,
+            message: "El técnico ya está asignado a esta planta"
+          });
+        }
+
+        // Agregar el nuevo técnico
+        const nuevosTecnicos = [...tecnicosActuales, parseInt(usuarioId)];
+        plantaActualizada = await Planta.asignarTecnicos(plantaId, nuevosTecnicos);
+        
       } else if (usuario.rol === 'cliente') {
+        // ✅ CLIENTE: Usar sistema 1-a-1 (un cliente solo puede tener UNA planta)
+        
         // Verificar que el cliente no tenga ya una planta asignada
         const plantasCliente = await Planta.obtenerPorCliente(usuarioId);
         if (plantasCliente.length > 0) {
@@ -213,6 +230,8 @@ export const asignarPlantaUsuario = async (req, res) => {
             message: "El cliente ya tiene una planta asignada"
           });
         }
+
+        // Asignar cliente a la planta (1-a-1)
         plantaActualizada = await Planta.asignarCliente(plantaId, usuarioId);
       } else {
         return res.status(400).json({
@@ -223,8 +242,16 @@ export const asignarPlantaUsuario = async (req, res) => {
     } else if (accion === 'desasignar') {
       // Desasignar planta
       if (usuario.rol === 'tecnico') {
-        plantaActualizada = await Planta.desasignarTecnico(plantaId);
+        // ✅ TÉCNICO: Quitar de la lista de muchos
+        const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
+        const tecnicosActuales = plantaCompleta?.tecnicos?.map(t => t.id) || [];
+        
+        // Filtrar el técnico a remover
+        const nuevosTecnicos = tecnicosActuales.filter(id => id !== parseInt(usuarioId));
+        plantaActualizada = await Planta.asignarTecnicos(plantaId, nuevosTecnicos);
+        
       } else if (usuario.rol === 'cliente') {
+        // ✅ CLIENTE: Desasignar (1-a-1)
         plantaActualizada = await Planta.desasignarCliente(plantaId);
       }
     } else {
