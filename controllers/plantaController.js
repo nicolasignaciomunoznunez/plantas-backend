@@ -1,8 +1,6 @@
 import { Planta } from "../models/plantaModel.js";
 import { Usuario } from "../models/usuarioModel.js";
 
-
-
 export const crearPlanta = async (req, res) => {
     try {
         const { nombre, ubicacion, clienteId } = req.body;
@@ -62,12 +60,11 @@ export const obtenerPlanta = async (req, res) => {
 export const obtenerPlantas = async (req, res) => {
     try {
         const { limite = 50, pagina = 1 } = req.query;
-        const { filtrosPlanta = {} } = req; // ← AGREGAR = {} para valor por defecto
+        const { filtrosPlanta = {} } = req;
         
         console.log('🔍 [CONTROLLER] Filtros aplicados:', filtrosPlanta);
         console.log('👤 [CONTROLLER] Usuario:', req.usuario?.email, 'Rol:', req.usuario?.rol);
         
-        // Pasar los filtros al modelo
         const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
 
         res.status(200).json({
@@ -86,7 +83,6 @@ export const obtenerPlantas = async (req, res) => {
         });
     }
 };
-
 
 export const obtenerPlantasCliente = async (req, res) => {
     try {
@@ -156,15 +152,14 @@ export const eliminarPlanta = async (req, res) => {
     }
 };
 
-
-// ✅ Asignar/desasignar planta a usuario
+// ✅ ASIGNAR/DESASIGNAR PLANTA A USUARIO - VERSIÓN CORREGIDA
 export const asignarPlantaUsuario = async (req, res) => {
   try {
     const { usuarioId, plantaId, accion } = req.body;
 
     console.log('🏭 [PLANTA CONTROLLER] Asignando planta:', { usuarioId, plantaId, accion });
 
-    // Verificar permisos - solo superadmin y admin pueden asignar plantas
+    // Verificar permisos
     if (!['superadmin', 'admin'].includes(req.usuario.rol)) {
       return res.status(403).json({
         success: false,
@@ -180,7 +175,7 @@ export const asignarPlantaUsuario = async (req, res) => {
       });
     }
 
-    // Obtener usuario para verificar su rol
+    // Obtener usuario y planta
     const usuario = await Usuario.buscarPorId(usuarioId);
     if (!usuario) {
       return res.status(404).json({
@@ -189,7 +184,6 @@ export const asignarPlantaUsuario = async (req, res) => {
       });
     }
 
-    // Obtener planta
     const planta = await Planta.buscarPorId(plantaId);
     if (!planta) {
       return res.status(404).json({
@@ -201,13 +195,11 @@ export const asignarPlantaUsuario = async (req, res) => {
     let plantaActualizada;
 
     if (accion === 'asignar') {
-      // Asignar planta según el rol del usuario
       if (usuario.rol === 'tecnico') {
-        // ✅ TÉCNICO: Usar sistema muchos-a-muchos
+        // ✅ TÉCNICO: Sistema muchos-a-muchos
         const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
         const tecnicosActuales = plantaCompleta?.tecnicos?.map(t => t.id) || [];
         
-        // Si el técnico ya está asignado, no hacer nada
         if (tecnicosActuales.includes(parseInt(usuarioId))) {
           return res.status(400).json({
             success: false,
@@ -215,24 +207,34 @@ export const asignarPlantaUsuario = async (req, res) => {
           });
         }
 
-        // Agregar el nuevo técnico
         const nuevosTecnicos = [...tecnicosActuales, parseInt(usuarioId)];
         plantaActualizada = await Planta.asignarTecnicos(plantaId, nuevosTecnicos);
         
       } else if (usuario.rol === 'cliente') {
-        // ✅ CLIENTE: Usar sistema 1-a-1 (un cliente solo puede tener UNA planta)
+        // ✅ CLIENTE: Sistema muchos-a-muchos (pero con restricción de 1 planta por cliente)
+        const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
+        const clientesActuales = plantaCompleta?.clientes?.map(c => c.id) || [];
         
-        // Verificar que el cliente no tenga ya una planta asignada
-        const plantasCliente = await Planta.obtenerPorCliente(usuarioId);
-        if (plantasCliente.length > 0) {
+        // Verificar que el cliente no tenga ya una planta asignada (en CUALQUIER planta)
+        const plantasDelCliente = await Planta.obtenerPorCliente(usuarioId);
+        if (plantasDelCliente.length > 0) {
           return res.status(400).json({
             success: false,
             message: "El cliente ya tiene una planta asignada"
           });
         }
 
-        // Asignar cliente a la planta (1-a-1)
-        plantaActualizada = await Planta.asignarCliente(plantaId, usuarioId);
+        // Verificar si ya está en esta planta
+        if (clientesActuales.includes(parseInt(usuarioId))) {
+          return res.status(400).json({
+            success: false,
+            message: "El cliente ya está asignado a esta planta"
+          });
+        }
+
+        // Agregar el nuevo cliente
+        const nuevosClientes = [...clientesActuales, parseInt(usuarioId)];
+        plantaActualizada = await Planta.asignarClientes(plantaId, nuevosClientes);
       } else {
         return res.status(400).json({
           success: false,
@@ -240,19 +242,21 @@ export const asignarPlantaUsuario = async (req, res) => {
         });
       }
     } else if (accion === 'desasignar') {
-      // Desasignar planta
       if (usuario.rol === 'tecnico') {
-        // ✅ TÉCNICO: Quitar de la lista de muchos
+        // ✅ TÉCNICO: Quitar de lista
         const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
         const tecnicosActuales = plantaCompleta?.tecnicos?.map(t => t.id) || [];
         
-        // Filtrar el técnico a remover
         const nuevosTecnicos = tecnicosActuales.filter(id => id !== parseInt(usuarioId));
         plantaActualizada = await Planta.asignarTecnicos(plantaId, nuevosTecnicos);
         
       } else if (usuario.rol === 'cliente') {
-        // ✅ CLIENTE: Desasignar (1-a-1)
-        plantaActualizada = await Planta.desasignarCliente(plantaId);
+        // ✅ CLIENTE: Quitar de lista
+        const plantaCompleta = await Planta.obtenerPlantasCompletas(plantaId);
+        const clientesActuales = plantaCompleta?.clientes?.map(c => c.id) || [];
+        
+        const nuevosClientes = clientesActuales.filter(id => id !== parseInt(usuarioId));
+        plantaActualizada = await Planta.asignarClientes(plantaId, nuevosClientes);
       }
     } else {
       return res.status(400).json({
@@ -283,7 +287,6 @@ export const obtenerPlantasUsuario = async (req, res) => {
 
     console.log('🔍 [PLANTA CONTROLLER] Obteniendo plantas para usuario:', usuarioId);
 
-    // Obtener usuario
     const usuario = await Usuario.buscarPorId(usuarioId);
     if (!usuario) {
       return res.status(404).json({
@@ -295,10 +298,8 @@ export const obtenerPlantasUsuario = async (req, res) => {
     let plantas;
 
     if (usuario.rol === 'tecnico') {
-      // Obtener plantas asignadas al técnico
       plantas = await Planta.obtenerPorTecnico(usuarioId);
     } else if (usuario.rol === 'cliente') {
-      // Obtener planta del cliente
       plantas = await Planta.obtenerPorCliente(usuarioId);
     } else {
       return res.status(400).json({
@@ -359,7 +360,6 @@ export const asignarMultiplesTecnicos = async (req, res) => {
 
     console.log('👥 [PLANTA CONTROLLER] Asignando múltiples técnicos:', { plantaId: id, tecnicosIds });
 
-    // Validar datos
     if (!tecnicosIds || !Array.isArray(tecnicosIds)) {
       return res.status(400).json({
         success: false,
@@ -367,7 +367,6 @@ export const asignarMultiplesTecnicos = async (req, res) => {
       });
     }
 
-    // Asignar múltiples técnicos
     const plantaActualizada = await Planta.asignarTecnicos(id, tecnicosIds);
 
     res.status(200).json({
@@ -393,7 +392,6 @@ export const asignarMultiplesClientes = async (req, res) => {
 
     console.log('👥 [PLANTA CONTROLLER] Asignando múltiples clientes:', { plantaId: id, clientesIds });
 
-    // Validar datos
     if (!clientesIds || !Array.isArray(clientesIds)) {
       return res.status(400).json({
         success: false,
@@ -401,7 +399,17 @@ export const asignarMultiplesClientes = async (req, res) => {
       });
     }
 
-    // Asignar múltiples clientes
+    // Verificar que ningún cliente ya tenga planta asignada
+    for (const clienteId of clientesIds) {
+      const plantasDelCliente = await Planta.obtenerPorCliente(clienteId);
+      if (plantasDelCliente.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `El cliente ${clienteId} ya tiene una planta asignada`
+        });
+      }
+    }
+
     const plantaActualizada = await Planta.asignarClientes(id, clientesIds);
 
     res.status(200).json({
@@ -426,17 +434,15 @@ export const obtenerPlantasCompletas = async (req, res) => {
 
     console.log('🔍 [PLANTA CONTROLLER] Obteniendo todas las plantas completas');
 
-    // Obtener plantas básicas
     const plantas = await Planta.obtenerTodas(limite, pagina);
 
-    // Enriquecer cada planta con técnicos y clientes
     const plantasCompletas = await Promise.all(
       plantas.map(async (planta) => {
         try {
           return await Planta.obtenerPlantasCompletas(planta.id);
         } catch (error) {
           console.error(`Error obteniendo planta completa ${planta.id}:`, error);
-          return planta; // Retornar planta básica en caso de error
+          return planta;
         }
       })
     );

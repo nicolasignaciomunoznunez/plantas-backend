@@ -52,7 +52,7 @@ export class Planta {
         }
     }
 
-    // Obtener todas las plantas - CORREGIDO
+    // Obtener todas las plantas
     static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         try {
             const limiteNum = Number(limite);
@@ -64,7 +64,6 @@ export class Planta {
             
             const offset = (paginaNum - 1) * limiteNum;
             
-            // Construir WHERE clause dinámicamente basado en filtros
             let whereClause = 'WHERE 1=1';
             
             if (filtros.tecnicoId) {
@@ -102,11 +101,15 @@ export class Planta {
         }
     }
 
-    // Obtener plantas por cliente
+    // ✅ CORREGIDO: Obtener plantas por cliente (busca en usuario_plantas)
     static async obtenerPorCliente(clienteId) {
         try {
             const [plantas] = await pool.execute(
-                `SELECT * FROM plants WHERE clienteId = ? ORDER BY nombre`,
+                `SELECT p.* 
+                 FROM plants p
+                 INNER JOIN usuario_plantas up ON p.id = up.planta_id
+                 WHERE up.usuario_id = ? AND up.tipo_usuario = 'cliente'
+                 ORDER BY p.nombre`,
                 [clienteId]
             );
 
@@ -162,7 +165,7 @@ export class Planta {
         }
     }
 
-    // ✅ MÉTODOS EXISTENTES (1-a-1) - MANTENER PARA COMPATIBILIDAD
+    // ✅ MÉTODOS PARA TÉCNICOS (1-a-1 - MANTENER POR COMPATIBILIDAD)
     static async asignarTecnico(plantaId, tecnicoId) {
         try {
             const [resultado] = await pool.execute(
@@ -177,23 +180,6 @@ export class Planta {
             return await this.buscarPorId(plantaId);
         } catch (error) {
             throw new Error(`Error asignando técnico: ${error.message}`);
-        }
-    }
-
-    static async asignarCliente(plantaId, clienteId) {
-        try {
-            const [resultado] = await pool.execute(
-                `UPDATE plants SET clienteId = ? WHERE id = ?`,
-                [clienteId, plantaId]
-            );
-
-            if (resultado.affectedRows === 0) {
-                throw new Error('Planta no encontrada');
-            }
-
-            return await this.buscarPorId(plantaId);
-        } catch (error) {
-            throw new Error(`Error asignando cliente: ${error.message}`);
         }
     }
 
@@ -214,23 +200,6 @@ export class Planta {
         }
     }
 
-    static async desasignarCliente(plantaId) {
-        try {
-            const [resultado] = await pool.execute(
-                `UPDATE plants SET clienteId = NULL WHERE id = ?`,
-                [plantaId]
-            );
-
-            if (resultado.affectedRows === 0) {
-                throw new Error('Planta no encontrada');
-            }
-
-            return await this.buscarPorId(plantaId);
-        } catch (error) {
-            throw new Error(`Error desasignando cliente: ${error.message}`);
-        }
-    }
-
     static async obtenerPorTecnico(tecnicoId) {
         try {
             const [plantas] = await pool.execute(
@@ -248,7 +217,7 @@ export class Planta {
         }
     }
 
-    // ✅ NUEVOS MÉTODOS PARA RELACIONES MUCHOS-A-MUCHOS
+    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA TÉCNICOS
     static async asignarTecnicos(plantaId, tecnicosIds) {
         try {
             // Eliminar técnicos existentes para esta planta
@@ -272,6 +241,22 @@ export class Planta {
         }
     }
 
+    static async obtenerTecnicos(plantaId) {
+        try {
+            const [tecnicos] = await pool.execute(
+                `SELECT u.id, u.nombre, u.email, u.rol 
+                 FROM users u
+                 INNER JOIN usuario_plantas up ON u.id = up.usuario_id
+                 WHERE up.planta_id = ? AND up.tipo_usuario = 'tecnico'`,
+                [plantaId]
+            );
+            return tecnicos;
+        } catch (error) {
+            throw new Error(`Error obteniendo técnicos: ${error.message}`);
+        }
+    }
+
+    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA CLIENTES
     static async asignarClientes(plantaId, clientesIds) {
         try {
             // Eliminar clientes existentes para esta planta
@@ -295,21 +280,6 @@ export class Planta {
         }
     }
 
-    static async obtenerTecnicos(plantaId) {
-        try {
-            const [tecnicos] = await pool.execute(
-                `SELECT u.id, u.nombre, u.email, u.rol 
-                 FROM users u
-                 INNER JOIN usuario_plantas up ON u.id = up.usuario_id
-                 WHERE up.planta_id = ? AND up.tipo_usuario = 'tecnico'`,
-                [plantaId]
-            );
-            return tecnicos;
-        } catch (error) {
-            throw new Error(`Error obteniendo técnicos: ${error.message}`);
-        }
-    }
-
     static async obtenerClientes(plantaId) {
         try {
             const [clientes] = await pool.execute(
@@ -325,7 +295,7 @@ export class Planta {
         }
     }
 
-    // ✅ Obtener plantas con información completa de relaciones
+    // ✅ Obtener planta completa con técnicos y clientes
     static async obtenerPlantasCompletas(plantaId) {
         try {
             const planta = await this.buscarPorId(plantaId);
@@ -343,4 +313,6 @@ export class Planta {
             throw new Error(`Error obteniendo planta completa: ${error.message}`);
         }
     }
+
+
 }
