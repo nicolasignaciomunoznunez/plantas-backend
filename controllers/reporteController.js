@@ -259,42 +259,49 @@ switch(reporte.periodo) {
             metricas: null
         };
 
-        try {
-            // ✅ OBTENER INCIDENCIAS USANDO EL NUEVO MÉTODO
-            datosFiltrados.incidencias = await Incidencia.obtenerPorPlantaYRangoFechas(
-                reporte.plantId, 
-                fechaInicio, 
-                fechaFin
-            );
-            
-            // ✅ OBTENER MANTENIMIENTOS (filtro manual por ahora)
-            const todosMantenimientos = await Mantenimiento.obtenerPorPlanta(reporte.plantId);
-            datosFiltrados.mantenimientos = todosMantenimientos.filter(mantenimiento => {
-                const fechaMantenimiento = new Date(mantenimiento.fechaProgramada);
-                return fechaMantenimiento >= fechaInicio && fechaMantenimiento <= fechaFin;
-            });
+     try {
+    // ✅ OBTENER INCIDENCIAS USANDO EL NUEVO MÉTODO
+    datosFiltrados.incidencias = await Incidencia.obtenerPorPlantaYRangoFechas(
+        reporte.plantId, 
+        fechaInicio, 
+        fechaFin
+    );
+    
+    // ✅ OBTENER MANTENIMIENTOS USANDO EL NUEVO MÉTODO
+    datosFiltrados.mantenimientos = await Mantenimiento.obtenerPorPlantaYRangoFechas(
+        reporte.plantId, 
+        fechaInicio, 
+        fechaFin
+    );
 
-            // ✅ OBTENER MÉTRICAS TÉCNICAS
-            if (reporte.tipo === 'rendimiento' || reporte.tipo === 'calidad' || reporte.tipo === 'general') {
-                datosFiltrados.metricas = await obtenerMetricasTecnicas(reporte.plantId, fechaInicio, fechaFin);
-            }
+    // ✅ OBTENER MÉTRICAS TÉCNICAS
+    if (reporte.tipo === 'rendimiento' || reporte.tipo === 'calidad' || reporte.tipo === 'general') {
+        datosFiltrados.metricas = await obtenerMetricasTecnicas(reporte.plantId, fechaInicio, fechaFin);
+    }
 
-            console.log('📊 DATOS OBTENIDOS PARA PDF:', {
-                totalIncidencias: datosFiltrados.incidencias.length,
-                totalMantenimientos: datosFiltrados.mantenimientos.length,
-                tieneMetricas: !!datosFiltrados.metricas,
-                // Mostrar algunas incidencias para debug
-                incidenciasSample: datosFiltrados.incidencias.slice(0, 3).map(i => ({
-                    id: i.id,
-                    titulo: i.titulo,
-                    fechaReporte: i.fechaReporte,
-                    estado: i.estado
-                }))
-            });
+    console.log('📊 DATOS OBTENIDOS PARA PDF:', {
+        totalIncidencias: datosFiltrados.incidencias.length,
+        totalMantenimientos: datosFiltrados.mantenimientos.length,
+        tieneMetricas: !!datosFiltrados.metricas,
+        // Mostrar algunas incidencias para debug
+        incidenciasSample: datosFiltrados.incidencias.slice(0, 3).map(i => ({
+            id: i.id,
+            titulo: i.titulo,
+            fechaReporte: i.fechaReporte,
+            estado: i.estado
+        })),
+        // Mostrar algunos mantenimientos para debug
+        mantenimientosSample: datosFiltrados.mantenimientos.slice(0, 3).map(m => ({
+            id: m.id,
+            tipo: m.tipo,
+            fechaProgramada: m.fechaProgramada,
+            estado: m.estado
+        }))
+    });
 
-        } catch (error) {
-            console.error('❌ Error al obtener datos filtrados:', error);
-        }
+} catch (error) {
+    console.error('❌ Error al obtener datos filtrados:', error);
+}
 
         // Configurar respuesta PDF
         res.setHeader('Content-Type', 'application/pdf');

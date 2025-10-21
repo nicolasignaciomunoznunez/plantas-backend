@@ -292,4 +292,34 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
             throw new Error(`Error al eliminar mantenimiento: ${error.message}`);
         }
     }
+
+
+
+    static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
+    try {
+        const query = `
+            SELECT m.*, t.nombre as tecnicoNombre, p.nombre as plantaNombre 
+            FROM mantenimientos m 
+            LEFT JOIN users t ON m.tecnicoId = t.id 
+            LEFT JOIN plants p ON m.plantId = p.id 
+            WHERE m.plantId = ? 
+            AND m.fechaProgramada BETWEEN ? AND ?
+            ORDER BY m.fechaProgramada DESC
+        `;
+        
+        console.log('🔧 [MODEL] Query obtenerPorPlantaYRangoFechas (Mantenimientos):', { 
+            plantId, 
+            fechaInicio: fechaInicio.toISOString(), 
+            fechaFin: fechaFin.toISOString() 
+        });
+        
+        const [mantenimientos] = await pool.execute(query, [plantId, fechaInicio, fechaFin]);
+        
+        console.log('🔧 [MODEL] Mantenimientos encontrados:', mantenimientos.length);
+        
+        return mantenimientos;
+    } catch (error) {
+        throw new Error(`Error al obtener mantenimientos por planta y rango de fechas: ${error.message}`);
+    }
+}
 }
