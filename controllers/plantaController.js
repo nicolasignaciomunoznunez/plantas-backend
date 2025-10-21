@@ -85,22 +85,29 @@ export const obtenerPlantas = async (req, res) => {
 };
 
 export const obtenerPlantasCliente = async (req, res) => {
-    try {
-        const { clienteId } = req.params;
-        const plantas = await Planta.obtenerPorCliente(clienteId);
-
-        res.status(200).json({
-            success: true,
-            plantas
-        });
-    } catch (error) {
-        console.log("Error al obtener plantas del cliente:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
+  try {
+    const { clienteId } = req.params;
+    
+    console.log('🔍 [CONTROLLER] Obteniendo plantas para cliente:', clienteId);
+    
+    // ✅ USAR EL MÉTODO CORRECTO que consulta usuario_plantas
+    const plantas = await Planta.obtenerPorCliente(clienteId);
+    
+    console.log('📊 [CONTROLLER] Plantas encontradas:', plantas.length);
+    
+    res.status(200).json({
+      success: true,
+      plantas
+    });
+  } catch (error) {
+    console.error('❌ [CONTROLLER] Error obteniendo plantas del cliente:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
+
 
 export const actualizarPlanta = async (req, res) => {
     try {
@@ -464,3 +471,5 @@ export const obtenerPlantasCompletas = async (req, res) => {
     });
   }
 };
+
+
