@@ -300,7 +300,7 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
         const query = `
             SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
             FROM mantenimientos m 
-            LEFT JOIN users u ON m.userId = u.id  // ← CAMBIAR t por u y tecnicoId por userId
+            LEFT JOIN users u ON m.userId = u.id 
             LEFT JOIN plants p ON m.plantId = p.id 
             WHERE m.plantId = ? 
             AND m.fechaProgramada BETWEEN ? AND ?
