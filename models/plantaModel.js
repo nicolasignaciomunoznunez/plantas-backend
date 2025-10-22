@@ -369,47 +369,76 @@ static async obtenerPlantasConEstados() {
                 p.tecnicoId,
                 u.nombre as clienteNombre,
                 ut.nombre as tecnicoNombre,
-                COUNT(DISTINCT i.id) as incidenciasPendientes,
+              
+                COUNT(DISTINCT i.id) as totalIncidencias,
+                COUNT(DISTINCT CASE WHEN i.estado = 'resuelto' THEN i.id END) as incidenciasResueltas,
+                COUNT(DISTINCT CASE WHEN i.estado = 'pendiente' THEN i.id END) as incidenciasPendientes,
+                COUNT(DISTINCT CASE WHEN i.estado = 'en_progreso' THEN i.id END) as incidenciasEnProgreso,
                 COUNT(DISTINCT m.id) as mantenimientosPendientes,
+                
                 CASE 
-                    WHEN COUNT(DISTINCT i.id) > 2 THEN 'critical'
-                    WHEN COUNT(DISTINCT i.id) > 0 THEN 'attention' 
+                    WHEN COUNT(DISTINCT CASE WHEN i.estado = 'pendiente' THEN i.id END) > 2 THEN 'critical'
+                    WHEN COUNT(DISTINCT CASE WHEN i.estado = 'pendiente' THEN i.id END) > 0 THEN 'attention' 
+                    WHEN COUNT(DISTINCT CASE WHEN i.estado = 'en_progreso' THEN i.id END) > 0 THEN 'attention'
                     ELSE 'optimal'
                 END as estado
             FROM plants p
             LEFT JOIN users u ON p.clienteId = u.id
             LEFT JOIN users ut ON p.tecnicoId = ut.id
-            LEFT JOIN incidencias i ON p.id = i.plantId 
-                AND i.estado = 'pendiente'
-            LEFT JOIN mantenimientos m ON p.id = m.plantId 
-                AND m.estado = 'pendiente'
-            GROUP BY p.id, p.nombre, p.ubicacion, p.clienteId, p.tecnicoId, 
-                     u.nombre, ut.nombre
+            LEFT JOIN incidencias i ON p.id = i.plantId
+            LEFT JOIN mantenimientos m ON p.id = m.plantId AND m.estado = 'pendiente'
+            GROUP BY p.id, p.nombre, p.ubicacion, p.clienteId, p.tecnicoId, u.nombre, ut.nombre
             ORDER BY p.nombre
         `);
 
         console.log('✅ [PLANTA MODEL] Plantas con estados obtenidas:', plantas.length);
         
-        return plantas.map(planta => ({
-            id: planta.id,
-            nombre: planta.nombre,
-            ubicacion: planta.ubicacion,
-            clienteId: planta.clienteId,
-            tecnicoId: planta.tecnicoId,
-            clienteNombre: planta.clienteNombre,
-            tecnicoNombre: planta.tecnicoNombre,
-            estados: {
-                planta: planta.estado,
-                incidenciasPendientes: parseInt(planta.incidenciasPendientes) || 0,
-                mantenimientosPendientes: parseInt(planta.mantenimientosPendientes) || 0
-            }
-        }));
+        // ✅ DEBUG: Ver datos crudos
+        plantas.forEach(planta => {
+            console.log(`🔍 PLANTA ${planta.nombre}:`, {
+                total: planta.totalIncidencias,
+                resueltas: planta.incidenciasResueltas,
+                pendientes: planta.incidenciasPendientes,
+                enProgreso: planta.incidenciasEnProgreso,
+                estado: planta.estado
+            });
+        });
+        
+        return plantas.map(planta => {
+            const totalIncidencias = parseInt(planta.totalIncidencias) || 0;
+            const incidenciasResueltas = parseInt(planta.incidenciasResueltas) || 0;
+            
+            // ✅ Cálculo CORREGIDO de tasa de resolución
+            const tasaResolucion = totalIncidencias > 0 
+                ? Math.round((incidenciasResueltas / totalIncidencias) * 100)
+                : 100;
+
+            return {
+                id: planta.id,
+                nombre: planta.nombre,
+                ubicacion: planta.ubicacion,
+                clienteId: planta.clienteId,
+                tecnicoId: planta.tecnicoId,
+                clienteNombre: planta.clienteNombre,
+                tecnicoNombre: planta.tecnicoNombre,
+                tasaResolucion: tasaResolucion,
+                estados: {
+                    planta: planta.estado,
+                    incidenciasPendientes: parseInt(planta.incidenciasPendientes) || 0,
+                    incidenciasEnProgreso: parseInt(planta.incidenciasEnProgreso) || 0,
+                    incidenciasResueltas: incidenciasResueltas,
+                    mantenimientosPendientes: parseInt(planta.mantenimientosPendientes) || 0
+                }
+            };
+        });
         
     } catch (error) {
         console.error('❌ [PLANTA MODEL] Error en obtenerPlantasConEstados:', error);
         throw new Error(`Error obteniendo plantas con estados: ${error.message}`);
     }
 }
+
+
 
 static async obtenerResumenDashboard() {
     try {
