@@ -133,7 +133,7 @@ export const obtenerDashboardCompleto = async (req, res) => {
       Planta.obtenerMetricasConsolidadas(),
       Planta.obtenerPlantasConEstados(),
       Incidencia.obtenerRecientes(10), // Últimas 10 incidencias
-      Mantenimiento.obtenerPendientesProximos() // Mantenimientos próximos
+      Mantenimiento.obtenerPendientesProximos(10) // Mantenimientos próximos
     ]);
 
     const dashboardData = {

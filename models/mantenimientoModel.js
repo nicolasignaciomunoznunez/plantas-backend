@@ -334,6 +334,9 @@ static async obtenerPendientesProximos(limite = 10) {
     try {
         console.log('🔧 [MANTENIMIENTO MODEL] Obteniendo pendientes próximos');
         
+        // ✅ CONVERTIR a número explícitamente
+        const limiteNum = parseInt(limite) || 10;
+        
         const [mantenimientos] = await pool.execute(
             `SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
              FROM mantenimientos m 
@@ -343,7 +346,7 @@ static async obtenerPendientesProximos(limite = 10) {
              AND m.fechaProgramada >= CURDATE()
              ORDER BY m.fechaProgramada ASC 
              LIMIT ?`,
-            [limite]
+            [limiteNum] // ✅ Ahora es número
         );
 
         console.log('✅ [MANTENIMIENTO MODEL] Mantenimientos próximos obtenidos:', mantenimientos.length);
@@ -354,7 +357,6 @@ static async obtenerPendientesProximos(limite = 10) {
         throw new Error(`Error obteniendo mantenimientos próximos: ${error.message}`);
     }
 }
-
 static async obtenerResumenDashboard() {
     try {
         console.log('📊 [MANTENIMIENTO MODEL] Obteniendo resumen para dashboard');

@@ -289,9 +289,12 @@ static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
     ////////////nuevos metodos para dashboard
 
 
-    static async obtenerRecientes(limite = 10) {
+ static async obtenerRecientes(limite = 10) {
     try {
         console.log('🔄 [INCIDENCIA MODEL] Obteniendo incidencias recientes');
+        
+        // ✅ CONVERTIR a número explícitamente
+        const limiteNum = parseInt(limite) || 10;
         
         const [incidencias] = await pool.execute(
             `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
@@ -300,7 +303,7 @@ static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
              LEFT JOIN plants p ON i.plantId = p.id 
              ORDER BY i.fechaReporte DESC 
              LIMIT ?`,
-            [limite]
+            [limiteNum] // ✅ Ahora es número
         );
 
         console.log('✅ [INCIDENCIA MODEL] Incidencias recientes obtenidas:', incidencias.length);
