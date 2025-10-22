@@ -313,6 +313,172 @@ export class Planta {
             throw new Error(`Error obteniendo planta completa: ${error.message}`);
         }
     }
+        
 
+
+
+    /////////////////////////// nuevos metodos
+
+
+
+    static async obtenerMetricasConsolidadas() {
+    try {
+        console.log('📊 [PLANTA MODEL] Obteniendo métricas consolidadas');
+        
+        const [result] = await pool.execute(`
+            SELECT 
+                COUNT(DISTINCT p.id) as totalPlantas,
+                COUNT(DISTINCT CASE 
+                    WHEN pd.nivelLocal > 20 THEN p.id 
+                END) as plantasActivas,
+                COUNT(DISTINCT i.id) as incidenciasActivas,
+                COALESCE(AVG(pd.nivelLocal), 0) as eficienciaPromedio,
+                COUNT(DISTINCT m.id) as mantenimientosPendientes
+            FROM plants p
+            LEFT JOIN plant_data pd ON p.id = pd.plantId 
+                AND pd.timestamp = (
+                    SELECT MAX(timestamp) 
+                    FROM plant_data 
+                    WHERE plantId = p.id
+                )
+            LEFT JOIN incidencias i ON p.id = i.plantId 
+                AND i.estado = 'pendiente'
+            LEFT JOIN mantenimientos m ON p.id = m.plantId 
+                AND m.estado = 'pendiente'
+        `);
+
+        const metricas = result[0];
+        
+        console.log('✅ [PLANTA MODEL] Métricas consolidadas obtenidas');
+        
+        return {
+            totalPlantas: parseInt(metricas.totalPlantas) || 0,
+            plantasActivas: parseInt(metricas.plantasActivas) || 0,
+            incidenciasActivas: parseInt(metricas.incidenciasActivas) || 0,
+            mantenimientosPendientes: parseInt(metricas.mantenimientosPendientes) || 0,
+            eficienciaPromedio: parseFloat(metricas.eficienciaPromedio) || 0
+        };
+        
+    } catch (error) {
+        console.error('❌ [PLANTA MODEL] Error en obtenerMetricasConsolidadas:', error);
+        throw new Error(`Error obteniendo métricas: ${error.message}`);
+    }
+}
+
+static async obtenerPlantasConEstados() {
+    try {
+        console.log('🏭 [PLANTA MODEL] Obteniendo plantas con estados');
+        
+        const [plantas] = await pool.execute(`
+            SELECT 
+                p.id,
+                p.nombre,
+                p.ubicacion,
+                p.clienteId,
+                p.tecnicoId,
+                u.nombre as clienteNombre,
+                ut.nombre as tecnicoNombre,
+                pd.nivelLocal,
+                pd.presion,
+                pd.turbidez,
+                pd.cloro,
+                pd.timestamp as ultimaLectura,
+                COUNT(DISTINCT i.id) as incidenciasPendientes,
+                COUNT(DISTINCT m.id) as mantenimientosPendientes,
+                CASE 
+                    WHEN pd.nivelLocal > 20 THEN 'activa'
+                    WHEN pd.nivelLocal IS NULL THEN 'sin_datos'
+                    ELSE 'inactiva'
+                END as estado
+            FROM plants p
+            LEFT JOIN users u ON p.clienteId = u.id
+            LEFT JOIN users ut ON p.tecnicoId = ut.id
+            LEFT JOIN plant_data pd ON p.id = pd.plantId 
+                AND pd.timestamp = (
+                    SELECT MAX(timestamp) 
+                    FROM plant_data 
+                    WHERE plantId = p.id
+                )
+            LEFT JOIN incidencias i ON p.id = i.plantId 
+                AND i.estado = 'pendiente'
+            LEFT JOIN mantenimientos m ON p.id = m.plantId 
+                AND m.estado = 'pendiente'
+            GROUP BY p.id, p.nombre, p.ubicacion, p.clienteId, p.tecnicoId, 
+                     u.nombre, ut.nombre, pd.nivelLocal, pd.presion, 
+                     pd.turbidez, pd.cloro, pd.timestamp
+            ORDER BY p.nombre
+        `);
+
+        console.log('✅ [PLANTA MODEL] Plantas con estados obtenidas:', plantas.length);
+        
+        return plantas.map(planta => ({
+            id: planta.id,
+            nombre: planta.nombre,
+            ubicacion: planta.ubicacion,
+            clienteId: planta.clienteId,
+            tecnicoId: planta.tecnicoId,
+            clienteNombre: planta.clienteNombre,
+            tecnicoNombre: planta.tecnicoNombre,
+            ultimaLectura: planta.ultimaLectura,
+            metricas: {
+                nivelLocal: planta.nivelLocal,
+                presion: planta.presion,
+                turbidez: planta.turbidez,
+                cloro: planta.cloro
+            },
+            estados: {
+                planta: planta.estado,
+                incidenciasPendientes: parseInt(planta.incidenciasPendientes) || 0,
+                mantenimientosPendientes: parseInt(planta.mantenimientosPendientes) || 0
+            }
+        }));
+        
+    } catch (error) {
+        console.error('❌ [PLANTA MODEL] Error en obtenerPlantasConEstados:', error);
+        throw new Error(`Error obteniendo plantas con estados: ${error.message}`);
+    }
+}
+
+static async obtenerResumenDashboard() {
+    try {
+        console.log('🎯 [PLANTA MODEL] Obteniendo resumen dashboard');
+        
+        const [resumen] = await pool.execute(`
+            SELECT 
+                p.id,
+                p.nombre,
+                p.ubicacion,
+                pd.nivelLocal,
+                pd.timestamp as ultimaLectura,
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidenciasPendientes,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientosPendientes
+            FROM plants p
+            LEFT JOIN plant_data pd ON p.id = pd.plantId 
+                AND pd.timestamp = (
+                    SELECT MAX(timestamp) 
+                    FROM plant_data 
+                    WHERE plantId = p.id
+                )
+            ORDER BY p.nombre
+            LIMIT 10
+        `);
+
+        console.log('✅ [PLANTA MODEL] Resumen dashboard obtenido');
+        
+        return resumen.map(item => ({
+            id: item.id,
+            nombre: item.nombre,
+            ubicacion: item.ubicacion,
+            nivelLocal: item.nivelLocal,
+            ultimaLectura: item.ultimaLectura,
+            incidenciasPendientes: parseInt(item.incidenciasPendientes) || 0,
+            mantenimientosPendientes: parseInt(item.mantenimientosPendientes) || 0
+        }));
+        
+    } catch (error) {
+        console.error('❌ [PLANTA MODEL] Error en obtenerResumenDashboard:', error);
+        throw new Error(`Error obteniendo resumen dashboard: ${error.message}`);
+    }
+}
 
 }

@@ -473,3 +473,12 @@ export const obtenerPlantasCompletas = async (req, res) => {
 };
 
 
+export const obtenerPlantasDashboard = async (req, res) => {
+  try {
+    const plantas = await Planta.obtenerPlantasConEstados();
+    res.json({ success: true, plantas });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

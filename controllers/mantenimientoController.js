@@ -245,3 +245,14 @@ export const obtenerMantenimientos = async (req, res) => {
         });
     }
 };
+
+
+// Agregar método optimizado para dashboard
+export const obtenerMantenimientosResumen = async (req, res) => {
+  try {
+    const resumen = await Mantenimiento.obtenerResumenDashboard();
+    res.json({ success: true, ...resumen });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

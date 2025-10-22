@@ -300,3 +300,12 @@ export const eliminarIncidencia = async (req, res) => {
         });
     }
 };
+
+export const obtenerIncidenciasResumen = async (req, res) => {
+  try {
+    const resumen = await Incidencia.obtenerResumenDashboard();
+    res.json({ success: true, ...resumen });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

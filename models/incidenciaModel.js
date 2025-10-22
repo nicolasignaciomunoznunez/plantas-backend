@@ -281,4 +281,120 @@ static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
     }
 }
 
+
+
+
+
+
+    ////////////nuevos metodos para dashboard
+
+
+    static async obtenerRecientes(limite = 10) {
+    try {
+        console.log('🔄 [INCIDENCIA MODEL] Obteniendo incidencias recientes');
+        
+        const [incidencias] = await pool.execute(
+            `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
+             FROM incidencias i 
+             LEFT JOIN users u ON i.userId = u.id 
+             LEFT JOIN plants p ON i.plantId = p.id 
+             ORDER BY i.fechaReporte DESC 
+             LIMIT ?`,
+            [limite]
+        );
+
+        console.log('✅ [INCIDENCIA MODEL] Incidencias recientes obtenidas:', incidencias.length);
+        
+        return incidencias.map(incidencia => new Incidencia(incidencia));
+    } catch (error) {
+        console.error('❌ [INCIDENCIA MODEL] Error en obtenerRecientes:', error);
+        throw new Error(`Error obteniendo incidencias recientes: ${error.message}`);
+    }
+}
+
+static async obtenerResumenDashboard() {
+    try {
+        console.log('📊 [INCIDENCIA MODEL] Obteniendo resumen para dashboard');
+        
+        const [resumen] = await pool.execute(`
+            SELECT 
+                estado,
+                COUNT(*) as cantidad
+            FROM incidencias 
+            GROUP BY estado
+            ORDER BY 
+                CASE estado 
+                    WHEN 'pendiente' THEN 1
+                    WHEN 'en_progreso' THEN 2  
+                    WHEN 'resuelto' THEN 3
+                END
+        `);
+
+        const [recientes] = await pool.execute(`
+            SELECT i.*, p.nombre as plantaNombre
+            FROM incidencias i
+            LEFT JOIN plants p ON i.plantId = p.id
+            ORDER BY i.fechaReporte DESC
+            LIMIT 5
+        `);
+
+        console.log('✅ [INCIDENCIA MODEL] Resumen dashboard obtenido');
+        
+        return {
+            porEstado: resumen.reduce((acc, item) => {
+                acc[item.estado] = parseInt(item.cantidad) || 0;
+                return acc;
+            }, {}),
+            recientes: recientes.map(incidencia => new Incidencia(incidencia))
+        };
+        
+    } catch (error) {
+        console.error('❌ [INCIDENCIA MODEL] Error en obtenerResumenDashboard:', error);
+        throw new Error(`Error obteniendo resumen dashboard: ${error.message}`);
+    }
+}
+
+static async obtenerEstadisticasPorPlanta() {
+    try {
+        console.log('📈 [INCIDENCIA MODEL] Obteniendo estadísticas por planta');
+        
+        const [estadisticas] = await pool.execute(`
+            SELECT 
+                p.id,
+                p.nombre as plantaNombre,
+                COUNT(i.id) as totalIncidencias,
+                COUNT(CASE WHEN i.estado = 'pendiente' THEN 1 END) as pendientes,
+                COUNT(CASE WHEN i.estado = 'en_progreso' THEN 1 END) as enProgreso,
+                COUNT(CASE WHEN i.estado = 'resuelto' THEN 1 END) as resueltas
+            FROM plants p
+            LEFT JOIN incidencias i ON p.id = i.plantId
+            GROUP BY p.id, p.nombre
+            ORDER BY totalIncidencias DESC
+        `);
+
+        console.log('✅ [INCIDENCIA MODEL] Estadísticas por planta obtenidas');
+        
+        return estadisticas.map(estadistica => ({
+            plantaId: estadistica.id,
+            plantaNombre: estadistica.plantaNombre,
+            totalIncidencias: parseInt(estadistica.totalIncidencias) || 0,
+            pendientes: parseInt(estadistica.pendientes) || 0,
+            enProgreso: parseInt(estadistica.enProgreso) || 0,
+            resueltas: parseInt(estadistica.resueltas) || 0
+        }));
+        
+    } catch (error) {
+        console.error('❌ [INCIDENCIA MODEL] Error en obtenerEstadisticasPorPlanta:', error);
+        throw new Error(`Error obteniendo estadísticas por planta: ${error.message}`);
+    }
+}
+
+
+
+
+
+
+
+
+
 } 
