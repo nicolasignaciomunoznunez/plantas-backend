@@ -330,7 +330,7 @@ export class Planta {
                 COUNT(DISTINCT p.id) as totalPlantas,
                 COUNT(DISTINCT i.id) as incidenciasActivas,
                 COUNT(DISTINCT m.id) as mantenimientosPendientes,
-                85 as eficienciaPromedio  -- ✅ Valor temporal hasta que tengas plant_data
+                85 as eficienciaPromedio
             FROM plants p
             LEFT JOIN incidencias i ON p.id = i.plantId 
                 AND i.estado = 'pendiente'
