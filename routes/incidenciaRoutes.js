@@ -26,65 +26,33 @@ const router = express.Router();
 // Todas las rutas requieren autenticación
 router.use(verificarToken);
 
-// ✅ RUTAS EXISTENTES (se mantienen igual)
-router.post("/", crearIncidencia);
-router.get("/", obtenerIncidencias);
-router.get("/:id", obtenerIncidencia);
+router.get("/:id/reporte-pdf", (req, res, next) => {
+    console.log('🎯 [ROUTE DEBUG] Ruta PDF accedida para incidencia:', req.params.id);
+    console.log('🎯 [ROUTE DEBUG] Usuario:', req.usuario?.email);
+    console.log('🎯 [ROUTE DEBUG] Método:', req.method);
+    console.log('🎯 [ROUTE DEBUG] URL completa:', req.originalUrl);
+    next();
+}, generarReportePDF)// ✅ ESTA PRIMERO
+router.get("/:id/completa", obtenerIncidenciaCompleta);
+router.post("/:id/fotos", verificarRol(['admin', 'tecnico']), uploadMultiple, subirFotos);
+router.delete("/:id/fotos/:fotoId", verificarRol(['admin', 'tecnico']), eliminarFoto);
+router.post("/:id/materiales", verificarRol(['admin', 'tecnico']), agregarMateriales);
+router.delete("/:id/materiales/:materialId", verificarRol(['admin', 'tecnico']), eliminarMaterial);
+router.put("/:id/completar", verificarRol(['admin', 'tecnico']), completarIncidencia);
+
+// ✅ SEGUNDO: Rutas con parámetros específicos
 router.get("/planta/:plantId", obtenerIncidenciasPlanta);
 router.get("/estado/:estado", obtenerIncidenciasEstado);
+
+// ✅ TERCERO: Rutas GENERALES (más generales después)
+router.get("/:id", obtenerIncidencia); // ✅ ESTA ÚLTIMA
 router.put("/:id", verificarRol(['admin', 'tecnico']), actualizarIncidencia);
 router.patch("/:id/estado", verificarRol(['admin', 'tecnico']), cambiarEstadoIncidencia);
 router.delete("/:id", verificarRol(['admin']), eliminarIncidencia);
 
-// ✅ NUEVAS RUTAS PARA FOTOS Y ARCHIVOS
-// Subir múltiples fotos a una incidencia
-router.post("/:id/fotos", 
-    verificarRol(['admin', 'tecnico']), 
-    uploadMultiple, // ✅ Middleware de Multer para múltiples archivos
-    subirFotos
-);
-
-// Eliminar una foto específica
-router.delete("/:id/fotos/:fotoId", 
-    verificarRol(['admin', 'tecnico']), 
-    eliminarFoto
-);
-
-// ✅ NUEVAS RUTAS PARA MATERIALES
-// Agregar materiales a una incidencia
-router.post("/:id/materiales", 
-    verificarRol(['admin', 'tecnico']), 
-    agregarMateriales
-);
-
-// Eliminar un material específico
-router.delete("/:id/materiales/:materialId", 
-    verificarRol(['admin', 'tecnico']), 
-    eliminarMaterial
-);
-
-// ✅ NUEVA RUTA PARA COMPLETAR INCIDENCIA
-// Completar incidencia con resumen y materiales
-router.put("/:id/completar", 
-    verificarRol(['admin', 'tecnico']), 
-    completarIncidencia
-);
-
-// ✅ NUEVA RUTA PARA REPORTE PDF
-// Generar reporte PDF de la incidencia
-router.get("/:id/reporte-pdf", 
-    generarReportePDF // ✅ Todos los roles autenticados pueden ver el PDF
-);
-
-// ✅ NUEVA RUTA PARA OBTENER INCIDENCIA COMPLETA
-// Obtener incidencia con fotos y materiales incluidos
-router.get("/:id/completa", 
-    obtenerIncidenciaCompleta
-);
-
-// ✅ RUTA PARA RESUMEN (dashboard)
-router.get("/resumen/dashboard", 
-    obtenerIncidenciasResumen
-);
+// ✅ CUARTO: Rutas sin parámetros
+router.post("/", crearIncidencia);
+router.get("/", obtenerIncidencias);
+router.get("/resumen/dashboard", obtenerIncidenciasResumen);
 
 export default router;
