@@ -495,32 +495,39 @@ static async obtenerEstadisticasPorPlanta() {
     }
 
     // ✅ NUEVO: Completar incidencia con resumen
-    static async completarIncidencia(id, datosCompletar) {
-        try {
-            const { resumenTrabajo, tecnicoCompletoId, materiales = [] } = datosCompletar;
-            
-            // Actualizar incidencia
-            await pool.execute(
-                `UPDATE incidencias 
-                 SET estado = 'resuelto', 
-                     fecha_resolucion = NOW(),
-                     fecha_completado = NOW(),
-                     tecnico_completo_id = ?,
-                     resumen_trabajo = ?
-                 WHERE id = ?`,
-                [tecnicoCompletoId, resumenTrabajo, id]
-            );
+  static async completarIncidencia(id, datosCompletar) {
+    try {
+        const { resumenTrabajo, materiales = [] } = datosCompletar;
+        
+        console.log('🔄 [MODEL] Completando incidencia:', { id, datosCompletar });
+        
+        // Actualizar incidencia
+        const [result] = await pool.execute(
+            `UPDATE incidencias 
+             SET estado = 'resuelto', 
+                 fechaResolucion = NOW(),
+                 resumenTrabajo = ?
+             WHERE id = ?`,
+            [resumenTrabajo, id]
+        );
 
-            // Agregar materiales si existen
-            if (materiales.length > 0) {
-                await this.agregarMateriales(id, materiales);
-            }
+        console.log('✅ [MODEL] Incidencia actualizada:', result.affectedRows);
 
-            return await this.buscarCompletaPorId(id);
-        } catch (error) {
-            throw new Error(`Error al completar incidencia: ${error.message}`);
+        // Agregar materiales si existen
+        if (materiales && materiales.length > 0) {
+            console.log('📦 [MODEL] Agregando materiales:', materiales.length);
+            await this.agregarMateriales(id, materiales);
         }
+
+        const incidenciaCompleta = await this.buscarCompletaPorId(id);
+        console.log('✅ [MODEL] Incidencia completada exitosamente');
+        
+        return incidenciaCompleta;
+    } catch (error) {
+        console.error('❌ [MODEL] Error en completarIncidencia:', error);
+        throw new Error(`Error al completar incidencia: ${error.message}`);
     }
+}
 
     // ✅ NUEVO: Obtener estadísticas para reporte
     static async obtenerEstadisticasReporte(incidenciaId) {
