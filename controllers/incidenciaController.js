@@ -350,18 +350,25 @@ export const subirFotos = async (req, res) => {
             // ✅ LEER EL ARCHIVO COMO BUFFER
             const imageBuffer = fs.readFileSync(file.path);
             
-            // ✅ GUARDAR EN BASE DE DATOS CON BLOB
+            // ✅ CORREGIDO: Usar nombres consistentes
             const fotoData = {
                 tipo,
                 ruta_archivo: `/uploads/incidencias/${file.originalname}`,
                 descripcion: file.originalname,
-                datos_imagen: imageBuffer // ✅ GUARDAR IMAGEN COMO BLOB
+                datos_imagen: imageBuffer // ✅ Mismo nombre que en el modelo
             };
             
+            console.log('📸 [DEBUG] Subiendo foto:', {
+                tieneBuffer: !!fotoData.datos_imagen,
+                bufferSize: fotoData.datos_imagen?.length,
+                tipo: fotoData.tipo,
+                descripcion: fotoData.descripcion
+            });
+
             const fotoGuardada = await Incidencia.subirFotos(id, [fotoData]);
             fotosSubidas.push(fotoGuardada[0]);
             
-            // ✅ LIMPIAR ARCHIVO TEMPORAL (importante en Railway)
+            // ✅ LIMPIAR ARCHIVO TEMPORAL
             fs.unlinkSync(file.path);
         }
 

@@ -447,25 +447,38 @@ static async buscarCompletaPorId(id) {
         const fotosInsertadas = [];
         
         for (const foto of fotosData) {
+            console.log('📸 [MODEL DEBUG] Insertando foto:', {
+                incidenciaId,
+                tipo: foto.tipo,
+                ruta_archivo: foto.ruta_archivo,
+                descripcion: foto.descripcion,
+                tieneDatosImagen: !!foto.datos_imagen,
+                datosImagenTipo: typeof foto.datos_imagen
+            });
+
             const [resultado] = await pool.execute(
                 `INSERT INTO incidencia_fotos (incidencia_id, tipo, ruta_archivo, descripcion, datos_imagen) 
                  VALUES (?, ?, ?, ?, ?)`,
                 [
                     incidenciaId, 
                     foto.tipo, 
-                    foto.rutaArchivo, 
+                    foto.ruta_archivo, 
                     foto.descripcion || '',
-                    foto.datos_imagen 
+                    foto.datos_imagen // ✅ Asegúrate de que esto no sea undefined
                 ]
             );
+            
             fotosInsertadas.push({
                 id: resultado.insertId,
-                ...foto
+                tipo: foto.tipo,
+                ruta_archivo: foto.ruta_archivo,
+                descripcion: foto.descripcion
             });
         }
         
         return fotosInsertadas;
     } catch (error) {
+        console.error('❌ [MODEL ERROR] Error en subirFotos:', error);
         throw new Error(`Error al subir fotos: ${error.message}`);
     }
 }
