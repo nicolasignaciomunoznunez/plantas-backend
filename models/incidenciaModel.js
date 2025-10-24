@@ -402,45 +402,44 @@ static async obtenerEstadisticasPorPlanta() {
 }
 
 
-// ✅ NUEVO: Buscar incidencia COMPLETA con fotos y materiales
-    static async buscarCompletaPorId(id) {
-        try {
-            const [incidencias] = await pool.execute(
-                `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre,
-                        ut.nombre as tecnicoCompletoNombre
-                 FROM incidencias i 
-                 LEFT JOIN users u ON i.userId = u.id 
-                 LEFT JOIN plants p ON i.plantId = p.id 
-                 LEFT JOIN users ut ON i.tecnico_completo_id = ut.id
-                 WHERE i.id = ?`,
-                [id]
-            );
 
-            if (incidencias.length === 0) {
-                return null;
-            }
+static async buscarCompletaPorId(id) {
+    try {
+       
+        const [incidencias] = await pool.execute(
+            `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
+             FROM incidencias i 
+             LEFT JOIN users u ON i.userId = u.id 
+             LEFT JOIN plants p ON i.plantId = p.id 
+             WHERE i.id = ?`,
+            [id]
+        );
 
-            const incidencia = new Incidencia(incidencias[0]);
-            
-            // ✅ Cargar fotos
-            const [fotos] = await pool.execute(
-                `SELECT * FROM incidencia_fotos WHERE incidencia_id = ? ORDER BY tipo, created_at`,
-                [id]
-            );
-            incidencia.fotos = fotos;
-            
-            // ✅ Cargar materiales
-            const [materiales] = await pool.execute(
-                `SELECT * FROM incidencia_materiales WHERE incidencia_id = ? ORDER BY created_at`,
-                [id]
-            );
-            incidencia.materiales = materiales;
-
-            return incidencia;
-        } catch (error) {
-            throw new Error(`Error al buscar incidencia completa: ${error.message}`);
+        if (incidencias.length === 0) {
+            return null;
         }
+
+        const incidencia = new Incidencia(incidencias[0]);
+        
+        // ✅ Cargar fotos
+        const [fotos] = await pool.execute(
+            `SELECT * FROM incidencia_fotos WHERE incidencia_id = ? ORDER BY tipo, created_at`,
+            [id]
+        );
+        incidencia.fotos = fotos;
+        
+        // ✅ Cargar materiales
+        const [materiales] = await pool.execute(
+            `SELECT * FROM incidencia_materiales WHERE incidencia_id = ? ORDER BY created_at`,
+            [id]
+        );
+        incidencia.materiales = materiales;
+
+        return incidencia;
+    } catch (error) {
+        throw new Error(`Error al buscar incidencia completa: ${error.message}`);
     }
+}
 
     // ✅ NUEVO: Subir fotos a incidencia
     static async subirFotos(incidenciaId, fotosData) {
@@ -495,13 +494,12 @@ static async obtenerEstadisticasPorPlanta() {
     }
 
     // ✅ NUEVO: Completar incidencia con resumen
-  static async completarIncidencia(id, datosCompletar) {
+static async completarIncidencia(id, datosCompletar) {
     try {
         const { resumenTrabajo, materiales = [] } = datosCompletar;
         
         console.log('🔄 [MODEL] Completando incidencia:', { id, datosCompletar });
-        
-        // Actualizar incidencia
+   
         const [result] = await pool.execute(
             `UPDATE incidencias 
              SET estado = 'resuelto', 
@@ -519,10 +517,8 @@ static async obtenerEstadisticasPorPlanta() {
             await this.agregarMateriales(id, materiales);
         }
 
-        const incidenciaCompleta = await this.buscarCompletaPorId(id);
-        console.log('✅ [MODEL] Incidencia completada exitosamente');
-        
-        return incidenciaCompleta;
+        // ✅ Devolver la incidencia básica en lugar de la "completa"
+        return await this.buscarPorId(id);
     } catch (error) {
         console.error('❌ [MODEL] Error en completarIncidencia:', error);
         throw new Error(`Error al completar incidencia: ${error.message}`);

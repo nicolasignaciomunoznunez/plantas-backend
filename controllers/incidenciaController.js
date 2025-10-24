@@ -440,7 +440,7 @@ export const completarIncidencia = async (req, res) => {
     try {
         const { id } = req.params;
         const { resumenTrabajo, materiales = [] } = req.body;
-        const tecnicoCompletoId = req.usuarioId;
+        // ❌ QUITAR: const tecnicoCompletoId = req.usuarioId;
 
         if (!resumenTrabajo) {
             return res.status(400).json({
@@ -466,9 +466,9 @@ export const completarIncidencia = async (req, res) => {
             });
         }
 
+        // ✅ SIMPLIFICAR: Solo pasar los datos necesarios
         const datosCompletar = {
             resumenTrabajo,
-            tecnicoCompletoId,
             materiales
         };
 
@@ -488,7 +488,6 @@ export const completarIncidencia = async (req, res) => {
         });
     }
 };
-
 
 // ✅ NUEVO: Obtener incidencia completa con fotos y materiales
 export const obtenerIncidenciaCompleta = async (req, res) => {
@@ -581,7 +580,10 @@ export const eliminarMaterial = async (req, res) => {
 };
 
 
-// ✅ NUEVO: Generar reporte PDF con IMÁGENES usando PDFKit
+// Generar reporte PDF con IMAGENES usando PDFKit
+
+
+// ✅ NUEVO: Generar reporte PDF con IMÁGENES usando PDFKit - CORREGIDO
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
@@ -594,9 +596,6 @@ export const generarReportePDF = async (req, res) => {
                 message: "Incidencia no encontrada"
             });
         }
-
-        // Obtener estadísticas para el reporte
-        const estadisticas = await Incidencia.obtenerEstadisticasReporte(id);
 
         // Crear documento PDF
         const doc = new PDFDocument({ 
@@ -613,7 +612,7 @@ export const generarReportePDF = async (req, res) => {
 
         // ✅ FUNCIÓN PARA AGREGAR IMÁGENES AL PDF
         const agregarImagenesAlPDF = async (fotos, tituloSeccion) => {
-            if (!fotos || fotos.length === 0) return doc.y;
+            if (!fotos || fotos.length === 0) return;
             
             doc.addPage();
             let yPosition = 50;
@@ -671,8 +670,6 @@ export const generarReportePDF = async (req, res) => {
                     yPosition += 20;
                 }
             }
-            
-            return yPosition;
         };
 
         // ✅ TÍTULO DEL REPORTE
@@ -709,19 +706,15 @@ export const generarReportePDF = async (req, res) => {
         
         yPosition += 15;
         doc.text(`Planta: ${incidencia.plantaNombre}`, 50, yPosition)
-           .text(`Ubicación: ${estadisticas.planta_ubicacion || 'No especificada'}`, 250, yPosition);
+           .text(`Estado: ${incidencia.estado.toUpperCase()}`, 250, yPosition);
         
         yPosition += 15;
         doc.text(`Reportado por: ${incidencia.usuarioNombre}`, 50, yPosition)
            .text(`Fecha de reporte: ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 250, yPosition);
         
-        yPosition += 15;
-        doc.text(`Estado: ${incidencia.estado.toUpperCase()}`, 50, yPosition);
-
-        if (incidencia.estado === 'resuelto') {
+        if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
             yPosition += 15;
-            doc.text(`Completado por: ${estadisticas.tecnico_completo_nombre || 'N/A'}`, 50, yPosition)
-               .text(`Fecha de completado: ${new Date(incidencia.fechaCompletado).toLocaleDateString('es-ES')}`, 250, yPosition);
+            doc.text(`Fecha de resolución: ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 50, yPosition);
         }
 
         yPosition += 30;
@@ -761,13 +754,13 @@ export const generarReportePDF = async (req, res) => {
         }
 
         // ✅ FOTOS ANTES DEL TRABAJO
-        const fotosAntes = incidencia.fotos.filter(foto => foto.tipo === 'antes');
+        const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         if (fotosAntes.length > 0) {
             await agregarImagenesAlPDF(fotosAntes, 'FOTOS ANTES DEL TRABAJO');
         }
 
         // ✅ FOTOS DESPUÉS DEL TRABAJO
-        const fotosDespues = incidencia.fotos.filter(foto => foto.tipo === 'despues');
+        const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         if (fotosDespues.length > 0) {
             await agregarImagenesAlPDF(fotosDespues, 'FOTOS DESPUÉS DEL TRABAJO');
         }
@@ -840,11 +833,20 @@ export const generarReportePDF = async (req, res) => {
         doc.fontSize(11)
            .font('Helvetica')
            .fillColor('#000000')
-           .text(`• Total de fotos (antes): ${estadisticas.fotos_antes || 0}`, 50, statsY)
-           .text(`• Total de fotos (después): ${estadisticas.fotos_despues || 0}`, 50, statsY + 20)
-           .text(`• Total de materiales utilizados: ${estadisticas.total_materiales || 0}`, 50, statsY + 40)
-           .text(`• Costo total en materiales: $${(estadisticas.costo_total_materiales || 0).toLocaleString('es-CL')}`, 50, statsY + 60)
-           .text(`• Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50, statsY + 80);
+           .text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, statsY)
+           .text(`• Total de fotos (después): ${fotosDespues.length}`, 50, statsY + 20)
+           .text(`• Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50, statsY + 40);
+        
+        if (incidencia.materiales && incidencia.materiales.length > 0) {
+            const costoTotal = incidencia.materiales.reduce((total, material) => 
+                total + (material.cantidad * material.costo), 0
+            );
+            doc.text(`• Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50, statsY + 60);
+        }
+        
+        if (incidencia.fechaReporte && incidencia.fechaResolucion) {
+            doc.text(`• Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50, statsY + 80);
+        }
 
         // ✅ FIRMA Y FECHA
         const firmaY = 200;
@@ -870,10 +872,10 @@ export const generarReportePDF = async (req, res) => {
 
 // ✅ FUNCIÓN AUXILIAR: Calcular tiempo de resolución
 function calcularTiempoResolucion(incidencia) {
-    if (!incidencia.fechaCompletado || !incidencia.fechaReporte) return 'N/A';
+    if (!incidencia.fechaResolucion || !incidencia.fechaReporte) return 'N/A';
     
     const inicio = new Date(incidencia.fechaReporte);
-    const fin = new Date(incidencia.fechaCompletado);
+    const fin = new Date(incidencia.fechaResolucion);
     const diffMs = fin - inicio;
     
     const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
