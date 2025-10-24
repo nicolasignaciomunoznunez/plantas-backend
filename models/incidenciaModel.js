@@ -419,19 +419,21 @@ static async buscarCompletaPorId(id) {
 
         const incidencia = new Incidencia(incidencias[0]);
         
-        // ✅ Cargar fotos CON datos_imagen
+        // ✅ CORREGIDO: Usar incidencia_id (con guión bajo)
         const [fotos] = await pool.execute(
             `SELECT id, tipo, ruta_archivo, descripcion, datos_imagen, created_at
              FROM incidencia_fotos 
-             WHERE incidenciaId = ? 
+             WHERE incidencia_id = ?  -- ✅ CAMBIADO: incidenciaId → incidencia_id
              ORDER BY tipo, created_at`,
             [id]
         );
         incidencia.fotos = fotos;
         
-        // ✅ Cargar materiales
+        // ✅ CORREGIDO: Usar incidencia_id (con guión bajo)
         const [materiales] = await pool.execute(
-            `SELECT * FROM incidencia_materiales WHERE incidenciaId = ? ORDER BY created_at`,
+            `SELECT * FROM incidencia_materiales 
+             WHERE incidencia_id = ?  -- ✅ CAMBIADO: incidenciaId → incidencia_id
+             ORDER BY created_at`,
             [id]
         );
         incidencia.materiales = materiales;
@@ -441,6 +443,7 @@ static async buscarCompletaPorId(id) {
         throw new Error(`Error al buscar incidencia completa: ${error.message}`);
     }
 }
+
     // ✅ NUEVO: Subir fotos a incidencia
  static async subirFotos(incidenciaId, fotosData) {
     try {
