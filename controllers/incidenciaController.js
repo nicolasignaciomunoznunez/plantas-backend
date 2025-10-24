@@ -639,7 +639,7 @@ export const generarReportePDF = async (req, res) => {
             // Procesar cada imagen
             for (let i = 0; i < fotos.length; i++) {
                 const foto = fotos[i];
-                const imagePath = path.join(__dirname, '../../', foto.ruta_archivo);
+               const imagePath = path.join(__dirname, '../../', foto.rutaArchivo);
                 
                 // Verificar que la imagen existe
                 if (!fs.existsSync(imagePath)) {
@@ -808,10 +808,10 @@ export const generarReportePDF = async (req, res) => {
                 totalCosto += subtotal;
                 
                 // Manejar texto largo en nombre del material
-                const materialLines = doc.text(material.material_nombre, 50, materialY, { 
-                    width: 180,
-                    lineGap: 1
-                });
+              const materialLines = doc.text(material.materialNombre, 50, materialY, { 
+    width: 180,
+    lineGap: 1
+});
                 
                 const lineHeight = materialLines.height;
                 
