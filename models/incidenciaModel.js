@@ -2,7 +2,7 @@ import { pool } from "../db/connectDB.js";
 
 export class Incidencia {
     constructor(incidencia) {
-        this.id = incidencia.id;
+         this.id = incidencia.id;
         this.plantId = incidencia.plantId;
         this.userId = incidencia.userId;
         this.titulo = incidencia.titulo;
@@ -14,6 +14,11 @@ export class Incidencia {
         this.planta = incidencia.planta;
         this.plantaNombre = incidencia.plantaNombre;
         this.usuarioNombre = incidencia.usuarioNombre;
+        this.resumenTrabajo = incidencia.resumenTrabajo;
+        this.fechaCompletado = incidencia.fechaCompletado;
+        this.tecnicoCompletoId = incidencia.tecnicoCompletoId;
+        this.fotos = incidencia.fotos || [];
+        this.materiales = incidencia.materiales || [];
     }
 
     // Crear nueva incidencia
@@ -397,11 +402,182 @@ static async obtenerEstadisticasPorPlanta() {
 }
 
 
+// ✅ NUEVO: Buscar incidencia COMPLETA con fotos y materiales
+    static async buscarCompletaPorId(id) {
+        try {
+            const [incidencias] = await pool.execute(
+                `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre,
+                        ut.nombre as tecnicoCompletoNombre
+                 FROM incidencias i 
+                 LEFT JOIN users u ON i.userId = u.id 
+                 LEFT JOIN plants p ON i.plantId = p.id 
+                 LEFT JOIN users ut ON i.tecnico_completo_id = ut.id
+                 WHERE i.id = ?`,
+                [id]
+            );
 
+            if (incidencias.length === 0) {
+                return null;
+            }
 
+            const incidencia = new Incidencia(incidencias[0]);
+            
+            // ✅ Cargar fotos
+            const [fotos] = await pool.execute(
+                `SELECT * FROM incidencia_fotos WHERE incidencia_id = ? ORDER BY tipo, created_at`,
+                [id]
+            );
+            incidencia.fotos = fotos;
+            
+            // ✅ Cargar materiales
+            const [materiales] = await pool.execute(
+                `SELECT * FROM incidencia_materiales WHERE incidencia_id = ? ORDER BY created_at`,
+                [id]
+            );
+            incidencia.materiales = materiales;
 
+            return incidencia;
+        } catch (error) {
+            throw new Error(`Error al buscar incidencia completa: ${error.message}`);
+        }
+    }
 
+    // ✅ NUEVO: Subir fotos a incidencia
+    static async subirFotos(incidenciaId, fotosData) {
+        try {
+            const fotosInsertadas = [];
+            
+            for (const foto of fotosData) {
+                const [resultado] = await pool.execute(
+                    `INSERT INTO incidencia_fotos (incidencia_id, tipo, ruta_archivo, descripcion) 
+                     VALUES (?, ?, ?, ?)`,
+                    [incidenciaId, foto.tipo, foto.rutaArchivo, foto.descripcion || '']
+                );
+                fotosInsertadas.push({
+                    id: resultado.insertId,
+                    ...foto
+                });
+            }
+            
+            return fotosInsertadas;
+        } catch (error) {
+            throw new Error(`Error al subir fotos: ${error.message}`);
+        }
+    }
 
+    // ✅ NUEVO: Agregar materiales a incidencia
+    static async agregarMateriales(incidenciaId, materiales) {
+        try {
+            const materialesInsertados = [];
+            
+            for (const material of materiales) {
+                const [resultado] = await pool.execute(
+                    `INSERT INTO incidencia_materiales (incidencia_id, material_nombre, cantidad, unidad, costo) 
+                     VALUES (?, ?, ?, ?, ?)`,
+                    [
+                        incidenciaId,
+                        material.nombre,
+                        material.cantidad,
+                        material.unidad,
+                        material.costo || 0
+                    ]
+                );
+                materialesInsertados.push({
+                    id: resultado.insertId,
+                    ...material
+                });
+            }
+            
+            return materialesInsertados;
+        } catch (error) {
+            throw new Error(`Error al agregar materiales: ${error.message}`);
+        }
+    }
+
+    // ✅ NUEVO: Completar incidencia con resumen
+    static async completarIncidencia(id, datosCompletar) {
+        try {
+            const { resumenTrabajo, tecnicoCompletoId, materiales = [] } = datosCompletar;
+            
+            // Actualizar incidencia
+            await pool.execute(
+                `UPDATE incidencias 
+                 SET estado = 'resuelto', 
+                     fecha_resolucion = NOW(),
+                     fecha_completado = NOW(),
+                     tecnico_completo_id = ?,
+                     resumen_trabajo = ?
+                 WHERE id = ?`,
+                [tecnicoCompletoId, resumenTrabajo, id]
+            );
+
+            // Agregar materiales si existen
+            if (materiales.length > 0) {
+                await this.agregarMateriales(id, materiales);
+            }
+
+            return await this.buscarCompletaPorId(id);
+        } catch (error) {
+            throw new Error(`Error al completar incidencia: ${error.message}`);
+        }
+    }
+
+    // ✅ NUEVO: Obtener estadísticas para reporte
+    static async obtenerEstadisticasReporte(incidenciaId) {
+        try {
+            const [estadisticas] = await pool.execute(`
+                SELECT 
+                    i.*,
+                    p.nombre as planta_nombre,
+                    p.ubicacion as planta_ubicacion,
+                    u.nombre as usuario_reporte_nombre,
+                    ut.nombre as tecnico_completo_nombre,
+                    (SELECT COUNT(*) FROM incidencia_fotos WHERE incidencia_id = ? AND tipo = 'antes') as fotos_antes,
+                    (SELECT COUNT(*) FROM incidencia_fotos WHERE incidencia_id = ? AND tipo = 'despues') as fotos_despues,
+                    (SELECT COUNT(*) FROM incidencia_materiales WHERE incidencia_id = ?) as total_materiales,
+                    (SELECT SUM(cantidad * costo) FROM incidencia_materiales WHERE incidencia_id = ?) as costo_total_materiales
+                FROM incidencias i
+                LEFT JOIN plants p ON i.plantId = p.id
+                LEFT JOIN users u ON i.userId = u.id
+                LEFT JOIN users ut ON i.tecnico_completo_id = ut.id
+                WHERE i.id = ?
+            `, [incidenciaId, incidenciaId, incidenciaId, incidenciaId, incidenciaId]);
+
+            if (estadisticas.length === 0) {
+                return null;
+            }
+
+            return estadisticas[0];
+        } catch (error) {
+            throw new Error(`Error al obtener estadísticas: ${error.message}`);
+        }
+    }
+
+    // ✅ NUEVO: Eliminar fotos de incidencia
+    static async eliminarFoto(fotoId) {
+        try {
+            const [resultado] = await pool.execute(
+                `DELETE FROM incidencia_fotos WHERE id = ?`,
+                [fotoId]
+            );
+            return resultado.affectedRows > 0;
+        } catch (error) {
+            throw new Error(`Error al eliminar foto: ${error.message}`);
+        }
+    }
+
+    // ✅ NUEVO: Eliminar material de incidencia
+    static async eliminarMaterial(materialId) {
+        try {
+            const [resultado] = await pool.execute(
+                `DELETE FROM incidencia_materiales WHERE id = ?`,
+                [materialId]
+            );
+            return resultado.affectedRows > 0;
+        } catch (error) {
+            throw new Error(`Error al eliminar material: ${error.message}`);
+        }
+    }
 
 
 } 

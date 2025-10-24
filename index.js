@@ -4,6 +4,9 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs';
 
 import { testConnection } from "./db/connectDB.js";
 import { verifyEmailConnection } from "./config/emailConfig.js";
@@ -16,6 +19,9 @@ import incidenciaRoutes from "./routes/incidenciaRoutes.js";
 import mantenimientoRoutes from "./routes/mantenimientoRoutes.js";
 import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -51,10 +57,24 @@ console.log('🚀 INICIANDO EN PUERTO:', PORT);
 app.use(cors({ origin: true, credentials: true }));
 
 // Middlewares
-app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
+app.use(helmet({ 
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  // ✅ CONFIGURACIÓN PARA PERMITIR ARCHIVOS ESTÁTICOS
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+    },
+  }
+}));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// ✅ SERVIR ARCHIVOS ESTÁTICOS (FOTOS SUBIDAS)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiting
 app.use('/api/', rateLimit({
@@ -80,6 +100,33 @@ app.use("/api/incidencias", incidenciaRoutes);
 app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+
+// ✅ NUEVO: RUTA PARA VERIFICAR ARCHIVOS SUBIDOS
+app.get("/api/uploads/check", (req, res) => {
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const incidenciasDir = path.join(__dirname, 'uploads/incidencias');
+  
+  try {
+    const stats = {
+      uploadsExists: fs.existsSync(uploadsDir),
+      incidenciasExists: fs.existsSync(incidenciasDir),
+      uploadsPath: uploadsDir,
+      incidenciasPath: incidenciasDir
+    };
+    
+    res.json({
+      success: true,
+      message: "Estado de directorios de uploads",
+      ...stats
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error verificando directorios",
+      error: error.message
+    });
+  }
+});
 
 // ✅ RUTA DE TEST EMAIL MEJORADA
 app.post("/api/test-sendgrid-api", async (req, res) => {
@@ -200,11 +247,21 @@ app.listen(PORT, '0.0.0.0', async () => {
   const dbConnected = await testConnection();
   console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
   
-  // ✅ VERIFICAR CONEXIÓN DE EMAIL AL INICIAR
- // console.log("📧 Verificando configuración de email...");
- // const emailConnected = await verifyEmailConnection();
- // console.log("📧 Email service:", emailConnected ? "✅ CONECTADO" : "❌ ERROR");
+  // ✅ VERIFICAR DIRECTORIOS DE UPLOADS AL INICIAR
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const incidenciasDir = path.join(__dirname, 'uploads/incidencias');
   
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log("📁 Directorio uploads creado:", uploadsDir);
+  }
+  
+  if (!fs.existsSync(incidenciasDir)) {
+    fs.mkdirSync(incidenciasDir, { recursive: true });
+    console.log("📁 Directorio incidencias creado:", incidenciasDir);
+  }
+  
+  console.log("📁 Servicio de archivos estáticos: ✅ CONFIGURADO");
   console.log("🌍 Entorno:", process.env.NODE_ENV);
   console.log("🔗 El dominio debería funcionar ahora");
   console.log("==========================================");
