@@ -594,6 +594,8 @@ export const eliminarMaterial = async (req, res) => {
 // Generar reporte PDF con IMAGENES usando PDFKit
 
 
+
+
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
@@ -730,9 +732,13 @@ export const generarReportePDF = async (req, res) => {
                 
                 fotoY += 15;
                 
-                // Intentar cargar imagen si existe
+                // ✅ CORREGIDO: Ruta de imagen funcionando
                 try {
-                    const imagePath = path.join(__dirname, '../../', foto.rutaArchivo || foto.ruta_archivo);
+                    const nombreArchivo = path.basename(foto.ruta_archivo);
+                    const imagePath = path.join(process.cwd(), 'uploads', 'incidencias', nombreArchivo);
+                    
+                    console.log('🖼️ [PDF DEBUG] Buscando imagen en:', imagePath);
+                    
                     if (fs.existsSync(imagePath)) {
                         doc.image(imagePath, 50, fotoY, { 
                             width: 400,
@@ -740,7 +746,9 @@ export const generarReportePDF = async (req, res) => {
                             fit: [400, 300]
                         });
                         fotoY += 320;
+                        console.log('✅ [PDF DEBUG] Imagen cargada:', nombreArchivo);
                     } else {
+                        console.log('❌ [PDF DEBUG] Imagen NO encontrada:', imagePath);
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#ff0000')
@@ -748,7 +756,7 @@ export const generarReportePDF = async (req, res) => {
                         fotoY += 20;
                     }
                 } catch (imageError) {
-                    console.log(`Error al cargar imagen:`, imageError);
+                    console.log(`❌ [PDF DEBUG] Error al cargar imagen:`, imageError);
                     doc.fontSize(10)
                        .font('Helvetica')
                        .fillColor('#ff0000')
@@ -782,8 +790,13 @@ export const generarReportePDF = async (req, res) => {
                 
                 fotoY += 15;
                 
+                // ✅ CORREGIDO: Ruta de imagen funcionando
                 try {
-                    const imagePath = path.join(__dirname, '../../', foto.rutaArchivo || foto.ruta_archivo);
+                    const nombreArchivo = path.basename(foto.ruta_archivo);
+                    const imagePath = path.join(process.cwd(), 'uploads', 'incidencias', nombreArchivo);
+                    
+                    console.log('🖼️ [PDF DEBUG] Buscando imagen en:', imagePath);
+                    
                     if (fs.existsSync(imagePath)) {
                         doc.image(imagePath, 50, fotoY, { 
                             width: 400,
@@ -791,7 +804,9 @@ export const generarReportePDF = async (req, res) => {
                             fit: [400, 300]
                         });
                         fotoY += 320;
+                        console.log('✅ [PDF DEBUG] Imagen cargada:', nombreArchivo);
                     } else {
+                        console.log('❌ [PDF DEBUG] Imagen NO encontrada:', imagePath);
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#ff0000')
@@ -799,6 +814,7 @@ export const generarReportePDF = async (req, res) => {
                         fotoY += 20;
                     }
                 } catch (imageError) {
+                    console.log(`❌ [PDF DEBUG] Error al cargar imagen:`, imageError);
                     doc.fontSize(10)
                        .font('Helvetica')
                        .fillColor('#ff0000')
