@@ -321,33 +321,60 @@ export class Planta {
 
 
 
-    static async obtenerMetricasConsolidadas() {
+static async obtenerMetricasConsolidadas() {
     try {
-        console.log('📊 [PLANTA MODEL] Obteniendo métricas consolidadas');
+        console.log('📊 [PLANTA MODEL] Obteniendo métricas para gráfico');
         
-        const [result] = await pool.execute(`
+        const [metricas] = await pool.execute(`
             SELECT 
-                COUNT(DISTINCT p.id) as totalPlantas,
-                COUNT(DISTINCT i.id) as incidenciasActivas,
-                COUNT(DISTINCT m.id) as mantenimientosPendientes,
-                85 as eficienciaPromedio
-            FROM plants p
-            LEFT JOIN incidencias i ON p.id = i.plantId 
-                AND i.estado = 'pendiente'
-            LEFT JOIN mantenimientos m ON p.id = m.plantId 
-                AND m.estado = 'pendiente'
+               
+                COUNT(*) as totalPlantas,
+             
+                SUM(CASE WHEN incidencias_pendientes > 0 THEN 1 ELSE 0 END) as plantasConIncidencias,
+                
+    
+                SUM(CASE WHEN mantenimientos_pendientes > 0 THEN 1 ELSE 0 END) as plantasConMantenimiento,
+                
+          
+                SUM(CASE WHEN incidencias_pendientes = 0 THEN 1 ELSE 0 END) as plantasOperativas,
+        
+                (SELECT COUNT(*) FROM incidencias WHERE estado = 'pendiente') as incidenciasPendientes,
+                (SELECT COUNT(*) FROM incidencias WHERE estado = 'en_progreso') as incidenciasEnProgreso,
+                (SELECT COUNT(*) FROM incidencias WHERE estado = 'resuelto') as incidenciasResueltas,
+                
+           
+                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'pendiente') as mantenimientosPendientes,
+                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'en_progreso') as mantenimientosEnProgreso,
+                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'completado') as mantenimientosCompletados
+                
+            FROM (
+                SELECT 
+                    p.id,
+                    (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidencias_pendientes,
+                    (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientos_pendientes
+                FROM plants p
+            ) as plantas_metrics
         `);
 
-        const metricas = result[0];
+        const resultado = metricas[0];
         
-        console.log('✅ [PLANTA MODEL] Métricas consolidadas obtenidas');
+        console.log('✅ [PLANTA MODEL] Métricas obtenidas:', resultado);
         
         return {
-            totalPlantas: parseInt(metricas.totalPlantas) || 0,
-            plantasActivas: parseInt(metricas.totalPlantas) || 0, // ✅ Mismo que total por ahora
-            incidenciasActivas: parseInt(metricas.incidenciasActivas) || 0,
-            mantenimientosPendientes: parseInt(metricas.mantenimientosPendientes) || 0,
-            eficienciaPromedio: 85 // ✅ Valor fijo temporal
+            totalPlantas: parseInt(resultado.totalPlantas) || 0,
+            plantasConIncidencias: parseInt(resultado.plantasConIncidencias) || 0,
+            plantasConMantenimiento: parseInt(resultado.plantasConMantenimiento) || 0,
+            plantasOperativas: parseInt(resultado.plantasOperativas) || 0,
+            incidencias: {
+                pendientes: parseInt(resultado.incidenciasPendientes) || 0,
+                enProgreso: parseInt(resultado.incidenciasEnProgreso) || 0,
+                resueltas: parseInt(resultado.incidenciasResueltas) || 0
+            },
+            mantenimientos: {
+                pendientes: parseInt(resultado.mantenimientosPendientes) || 0,
+                enProgreso: parseInt(resultado.mantenimientosEnProgreso) || 0,
+                completados: parseInt(resultado.mantenimientosCompletados) || 0
+            }
         };
         
     } catch (error) {
@@ -449,17 +476,11 @@ static async obtenerResumenDashboard() {
                 p.id,
                 p.nombre,
                 p.ubicacion,
-                pd.nivelLocal,
-                pd.timestamp as ultimaLectura,
+                NULL as nivelLocal,
+                NULL as ultimaLectura, 
                 (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidenciasPendientes,
                 (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientosPendientes
             FROM plants p
-            LEFT JOIN plant_data pd ON p.id = pd.plantId 
-                AND pd.timestamp = (
-                    SELECT MAX(timestamp) 
-                    FROM plant_data 
-                    WHERE plantId = p.id
-                )
             ORDER BY p.nombre
             LIMIT 10
         `);
@@ -473,7 +494,9 @@ static async obtenerResumenDashboard() {
             nivelLocal: item.nivelLocal,
             ultimaLectura: item.ultimaLectura,
             incidenciasPendientes: parseInt(item.incidenciasPendientes) || 0,
-            mantenimientosPendientes: parseInt(item.mantenimientosPendientes) || 0
+            mantenimientosPendientes: parseInt(item.mantenimientosPendientes) || 0,
+        
+            estado: item.incidenciasPendientes > 0 ? 'con_incidencias' : 'operativa'
         }));
         
     } catch (error) {
