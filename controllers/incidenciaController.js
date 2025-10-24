@@ -598,14 +598,15 @@ export const eliminarMaterial = async (req, res) => {
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
+        
+        console.log('🎯 [PDF DEBUG] Iniciando generación de PDF para incidencia:', id);
 
-        // Obtener datos completos de la incidencia
+        // Obtener datos completos
         const incidencia = await Incidencia.buscarCompletaPorId(id);
+        console.log('🎯 [PDF DEBUG] Incidencia encontrada:', !!incidencia);
+        
         if (!incidencia) {
-            return res.status(404).json({
-                success: false,
-                message: "Incidencia no encontrada"
-            });
+            return res.status(404).json({ success: false, message: "Incidencia no encontrada" });
         }
 
         // Crear documento PDF
@@ -614,270 +615,93 @@ export const generarReportePDF = async (req, res) => {
             size: 'A4'
         });
         
-        // Configurar headers para descarga
+        // Configurar headers
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=reporte-incidencia-${id}.pdf`);
         
+        // ✅ CORREGIDO: Manejar errores del stream
+        doc.on('error', (error) => {
+            console.log('❌ [PDF ERROR] Error en PDF stream:', error);
+            if (!res.headersSent) {
+                res.status(500).json({
+                    success: false,
+                    message: 'Error generando PDF: ' + error.message
+                });
+            }
+        });
+
+        res.on('error', (error) => {
+            console.log('❌ [RESPONSE ERROR] Error en response stream:', error);
+        });
+
         // Pipe el PDF a la respuesta
         doc.pipe(res);
 
-        // ✅ FUNCIÓN PARA AGREGAR IMÁGENES AL PDF
-        const agregarImagenesAlPDF = async (fotos, tituloSeccion) => {
-            if (!fotos || fotos.length === 0) return;
-            
-            doc.addPage();
-            let yPosition = 50;
-            
-            // Título de la sección
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text(tituloSeccion, 50, yPosition, { align: 'center' });
-            
-            yPosition += 30;
+        console.log('🎯 [PDF DEBUG] PDF configurado, agregando contenido...');
 
-            // Procesar cada imagen
-            for (let i = 0; i < fotos.length; i++) {
-                const foto = fotos[i];
-               const imagePath = path.join(__dirname, '../../', foto.rutaArchivo);
-                
-                // Verificar que la imagen existe
-                if (!fs.existsSync(imagePath)) {
-                    console.log(`Imagen no encontrada: ${imagePath}`);
-                    continue;
-                }
-
-                // Agregar título de la imagen
-                doc.fontSize(10)
-                   .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${i + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPosition);
-                
-                yPosition += 15;
-
-                try {
-                    // Agregar imagen al PDF (máximo 400px de ancho)
-                    doc.image(imagePath, 50, yPosition, { 
-                        width: 400,
-                        height: 300,
-                        fit: [400, 300]
-                    });
-                    
-                    yPosition += 320; // Espacio después de la imagen
-                    
-                    // Si no hay espacio para la siguiente imagen, crear nueva página
-                    if (yPosition > 650 && i < fotos.length - 1) {
-                        doc.addPage();
-                        yPosition = 50;
-                    }
-                    
-                } catch (imageError) {
-                    console.log(`Error al cargar imagen ${imagePath}:`, imageError);
-                    doc.fontSize(10)
-                       .font('Helvetica')
-                       .fillColor('#ff0000')
-                       .text(`Error al cargar imagen: ${foto.descripcion}`, 50, yPosition);
-                    
-                    yPosition += 20;
-                }
-            }
-        };
-
-        // ✅ TÍTULO DEL REPORTE
+        // ✅ CONTENIDO BÁSICO - SIN IMÁGENES PRIMERO
         doc.fontSize(20)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
            .text('REPORTE DE INCIDENCIA', 50, 50, { align: 'center' });
-        
-        // Logo (opcional)
-        try {
-            const logoPath = path.join(__dirname, '../../assets/logo.png');
-            if (fs.existsSync(logoPath)) {
-                doc.image(logoPath, 450, 35, { width: 80, height: 80 });
-            }
-        } catch (e) {
-            console.log('Logo no disponible');
-        }
 
-        doc.moveDown();
-
-        // ✅ INFORMACIÓN BÁSICA
-        let yPosition = 120;
-        
         doc.fontSize(12)
-           .font('Helvetica-Bold')
+           .font('Helvetica')
            .fillColor('#000000')
-           .text('INFORMACIÓN BÁSICA', 50, yPosition);
-        
-        yPosition += 25;
+           .text(`Incidencia: ${incidencia.titulo}`, 50, 100)
+           .text(`ID: ${incidencia.id}`, 50, 120)
+           .text(`Planta: ${incidencia.plantaNombre}`, 50, 140)
+           .text(`Reportado por: ${incidencia.usuarioNombre}`, 50, 160)
+           .text(`Estado: ${incidencia.estado}`, 50, 180)
+           .text(`Fecha: ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 50, 200);
+
+        // ✅ DESCRIPCIÓN
+        doc.font('Helvetica-Bold')
+           .text('DESCRIPCIÓN:', 50, 240);
         
         doc.font('Helvetica')
-           .text(`ID de Incidencia: ${incidencia.id}`, 50, yPosition)
-           .text(`Título: ${incidencia.titulo}`, 250, yPosition);
-        
-        yPosition += 15;
-        doc.text(`Planta: ${incidencia.plantaNombre}`, 50, yPosition)
-           .text(`Estado: ${incidencia.estado.toUpperCase()}`, 250, yPosition);
-        
-        yPosition += 15;
-        doc.text(`Reportado por: ${incidencia.usuarioNombre}`, 50, yPosition)
-           .text(`Fecha de reporte: ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 250, yPosition);
-        
-        if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosition += 15;
-            doc.text(`Fecha de resolución: ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 50, yPosition);
-        }
-
-        yPosition += 30;
-
-        // ✅ DESCRIPCIÓN Y RESUMEN
-        doc.font('Helvetica-Bold')
-           .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPosition);
-        
-        yPosition += 20;
-        
-        const descripcionLines = doc.font('Helvetica')
            .fontSize(10)
-           .text(incidencia.descripcion, 50, yPosition, { 
+           .text(incidencia.descripcion, 50, 260, { 
                width: 500, 
                align: 'justify',
                lineGap: 2
            });
-        
-        yPosition += descripcionLines.height + 20;
 
+        // ✅ RESUMEN SI EXISTE
         if (incidencia.resumenTrabajo) {
+            const yPosition = 300 + (incidencia.descripcion.length / 50) * 12;
+            
             doc.font('Helvetica-Bold')
                .fontSize(12)
-               .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPosition);
+               .text('RESUMEN DEL TRABAJO:', 50, yPosition);
             
-            yPosition += 20;
-            
-            const resumenLines = doc.font('Helvetica')
+            doc.font('Helvetica')
                .fontSize(10)
-               .text(incidencia.resumenTrabajo, 50, yPosition, { 
+               .text(incidencia.resumenTrabajo, 50, yPosition + 20, { 
                    width: 500, 
                    align: 'justify',
                    lineGap: 2
                });
-            
-            yPosition += resumenLines.height + 30;
         }
 
-        // ✅ FOTOS ANTES DEL TRABAJO
-        const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
-        if (fotosAntes.length > 0) {
-            await agregarImagenesAlPDF(fotosAntes, 'FOTOS ANTES DEL TRABAJO');
-        }
+        console.log('🎯 [PDF DEBUG] Contenido básico agregado, finalizando...');
 
-        // ✅ FOTOS DESPUÉS DEL TRABAJO
-        const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
-        if (fotosDespues.length > 0) {
-            await agregarImagenesAlPDF(fotosDespues, 'FOTOS DESPUÉS DEL TRABAJO');
-        }
-
-        // ✅ MATERIALES UTILIZADOS
-        if (incidencia.materiales && incidencia.materiales.length > 0) {
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
-            
-            let materialY = 80;
-            let totalCosto = 0;
-            
-            // Encabezados de tabla
-            doc.font('Helvetica-Bold')
-               .fontSize(10)
-               .text('Material', 50, materialY)
-               .text('Cantidad', 250, materialY)
-               .text('Costo Unitario', 350, materialY)
-               .text('Subtotal', 450, materialY);
-            
-            materialY += 20;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 10;
-
-            // Filas de materiales
-            doc.font('Helvetica')
-               .fontSize(9);
-               
-            incidencia.materiales.forEach(material => {
-                const subtotal = material.cantidad * material.costo;
-                totalCosto += subtotal;
-                
-                // Manejar texto largo en nombre del material
-              const materialLines = doc.text(material.materialNombre, 50, materialY, { 
-    width: 180,
-    lineGap: 1
-});
-                
-                const lineHeight = materialLines.height;
-                
-                doc.text(`${material.cantidad} ${material.unidad}`, 250, materialY)
-                   .text(`$${material.costo.toLocaleString('es-CL')}`, 350, materialY)
-                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
-                
-                materialY += lineHeight + 5;
-            });
-
-            // Total
-            materialY += 10;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 20;
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(10)
-               .text('TOTAL:', 350, materialY)
-               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
-        }
-
-        // ✅ ESTADÍSTICAS RESUMEN
-        doc.addPage();
-        doc.fontSize(14)
-           .font('Helvetica-Bold')
-           .fillColor('#2c5aa0')
-           .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
-        
-        let statsY = 100;
-        doc.fontSize(11)
-           .font('Helvetica')
-           .fillColor('#000000')
-           .text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, statsY)
-           .text(`• Total de fotos (después): ${fotosDespues.length}`, 50, statsY + 20)
-           .text(`• Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50, statsY + 40);
-        
-        if (incidencia.materiales && incidencia.materiales.length > 0) {
-            const costoTotal = incidencia.materiales.reduce((total, material) => 
-                total + (material.cantidad * material.costo), 0
-            );
-            doc.text(`• Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50, statsY + 60);
-        }
-        
-        if (incidencia.fechaReporte && incidencia.fechaResolucion) {
-            doc.text(`• Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50, statsY + 80);
-        }
-
-        // ✅ FIRMA Y FECHA
-        const firmaY = 200;
-        doc.font('Helvetica-Bold')
-           .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, firmaY);
-        
-        doc.moveTo(50, firmaY + 20).lineTo(250, firmaY + 20).stroke();
-        
-        doc.font('Helvetica')
-           .text(`Fecha de generación: ${new Date().toLocaleDateString('es-ES')}`, 350, firmaY + 20);
-
-        // Finalizar documento
+        // ✅ CORREGIDO: Finalizar documento SIN callbacks asíncronos
         doc.end();
+        console.log('✅ [PDF DEBUG] PDF finalizado, esperando stream...');
+
+        // ✅ El stream se cierra automáticamente cuando doc.end() termina
 
     } catch (error) {
-        console.log("Error al generar reporte PDF:", error);
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+        console.log('❌ [PDF DEBUG] ERROR CAPTURADO:', error);
+        console.log('❌ [PDF DEBUG] Stack:', error.stack);
+        
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: error.message
+            });
+        }
     }
 };
 
