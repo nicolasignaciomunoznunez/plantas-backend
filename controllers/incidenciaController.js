@@ -335,7 +335,7 @@ export const obtenerIncidenciasResumen = async (req, res) => {
 export const subirFotos = async (req, res) => {
     try {
         const { id } = req.params;
-        const { tipo } = req.body; // 'antes' o 'despues'
+        const { tipo } = req.body;
         
         if (!req.files || req.files.length === 0) {
             return res.status(400).json({
@@ -344,41 +344,25 @@ export const subirFotos = async (req, res) => {
             });
         }
 
-        if (!tipo || !['antes', 'despues'].includes(tipo)) {
-            return res.status(400).json({
-                success: false,
-                message: "Tipo de foto es requerido (antes/despues)"
-            });
-        }
-
-        // Verificar que la incidencia existe
-        const incidencia = await Incidencia.buscarPorId(id);
-        if (!incidencia) {
-            return res.status(404).json({
-                success: false,
-                message: "Incidencia no encontrada"
-            });
-        }
-
         const fotosSubidas = [];
         
-        // Procesar cada archivo
         for (const file of req.files) {
-            const nombreUnico = `${Date.now()}-${Math.round(Math.random() * 1E9)}${path.extname(file.originalname)}`;
-            const rutaArchivo = path.join(UPLOADS_DIR, nombreUnico);
+            // ✅ LEER EL ARCHIVO COMO BUFFER
+            const imageBuffer = fs.readFileSync(file.path);
             
-            // Mover archivo a directorio de uploads
-            fs.renameSync(file.path, rutaArchivo);
-            
-            // Guardar en base de datos
+            // ✅ GUARDAR EN BASE DE DATOS CON BLOB
             const fotoData = {
                 tipo,
-                rutaArchivo: `/uploads/incidencias/${nombreUnico}`,
-                descripcion: file.originalname
+                ruta_archivo: `/uploads/incidencias/${file.originalname}`,
+                descripcion: file.originalname,
+                datos_imagen: imageBuffer // ✅ GUARDAR IMAGEN COMO BLOB
             };
             
             const fotoGuardada = await Incidencia.subirFotos(id, [fotoData]);
             fotosSubidas.push(fotoGuardada[0]);
+            
+            // ✅ LIMPIAR ARCHIVO TEMPORAL (importante en Railway)
+            fs.unlinkSync(file.path);
         }
 
         res.status(200).json({
@@ -733,36 +717,29 @@ export const generarReportePDF = async (req, res) => {
                 fotoY += 15;
                 
                 // ✅ CORREGIDO: Ruta de imagen funcionando
-                try {
-                    const nombreArchivo = path.basename(foto.ruta_archivo);
-                    const imagePath = path.join(process.cwd(), 'uploads', 'incidencias', nombreArchivo);
-                    
-                    console.log('🖼️ [PDF DEBUG] Buscando imagen en:', imagePath);
-                    
-                    if (fs.existsSync(imagePath)) {
-                        doc.image(imagePath, 50, fotoY, { 
-                            width: 400,
-                            height: 300,
-                            fit: [400, 300]
-                        });
-                        fotoY += 320;
-                        console.log('✅ [PDF DEBUG] Imagen cargada:', nombreArchivo);
-                    } else {
-                        console.log('❌ [PDF DEBUG] Imagen NO encontrada:', imagePath);
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#ff0000')
-                           .text(`Imagen no encontrada: ${foto.descripcion}`, 50, fotoY);
-                        fotoY += 20;
-                    }
-                } catch (imageError) {
-                    console.log(`❌ [PDF DEBUG] Error al cargar imagen:`, imageError);
-                    doc.fontSize(10)
-                       .font('Helvetica')
-                       .fillColor('#ff0000')
-                       .text(`Error al cargar imagen: ${foto.descripcion}`, 50, fotoY);
-                    fotoY += 20;
-                }
+            try {
+    console.log('🖼️ [PDF DEBUG] Procesando foto:', foto.descripcion);
+    
+    // ✅ USAR BLOB DESDE BASE DE DATOS
+    if (foto.datos_imagen) {
+        doc.image(foto.datos_imagen, 50, fotoY, { 
+            width: 400,
+            height: 300,
+            fit: [400, 300]
+        });
+        fotoY += 320;
+        console.log('✅ Imagen cargada desde BLOB');
+    } else {
+        console.log('❌ No hay datos de imagen en BLOB');
+        doc.fontSize(10)
+           .font('Helvetica')
+           .fillColor('#ff0000')
+           .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
+        fotoY += 20;
+    }
+} catch (imageError) {
+    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
+}
             });
         }
 
@@ -792,35 +769,28 @@ export const generarReportePDF = async (req, res) => {
                 
                 // ✅ CORREGIDO: Ruta de imagen funcionando
                 try {
-                    const nombreArchivo = path.basename(foto.ruta_archivo);
-                    const imagePath = path.join(process.cwd(), 'uploads', 'incidencias', nombreArchivo);
-                    
-                    console.log('🖼️ [PDF DEBUG] Buscando imagen en:', imagePath);
-                    
-                    if (fs.existsSync(imagePath)) {
-                        doc.image(imagePath, 50, fotoY, { 
-                            width: 400,
-                            height: 300,
-                            fit: [400, 300]
-                        });
-                        fotoY += 320;
-                        console.log('✅ [PDF DEBUG] Imagen cargada:', nombreArchivo);
-                    } else {
-                        console.log('❌ [PDF DEBUG] Imagen NO encontrada:', imagePath);
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#ff0000')
-                           .text(`Imagen no encontrada: ${foto.descripcion}`, 50, fotoY);
-                        fotoY += 20;
-                    }
-                } catch (imageError) {
-                    console.log(`❌ [PDF DEBUG] Error al cargar imagen:`, imageError);
-                    doc.fontSize(10)
-                       .font('Helvetica')
-                       .fillColor('#ff0000')
-                       .text(`Error al cargar imagen: ${foto.descripcion}`, 50, fotoY);
-                    fotoY += 20;
-                }
+            console.log('🖼️ [PDF DEBUG] Procesando foto:', foto.descripcion);
+            
+            // ✅ USAR BLOB DESDE BASE DE DATOS
+            if (foto.datos_imagen) {
+                doc.image(foto.datos_imagen, 50, fotoY, { 
+                    width: 400,
+                    height: 300,
+                    fit: [400, 300]
+                });
+                fotoY += 320;
+                console.log('✅ Imagen cargada desde BLOB');
+            } else {
+                console.log('❌ No hay datos de imagen en BLOB');
+                doc.fontSize(10)
+                   .font('Helvetica')
+                   .fillColor('#ff0000')
+                   .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
+                fotoY += 20;
+            }
+        } catch (imageError) {
+            console.log('❌ Error al cargar imagen desde BLOB:', imageError);
+        }
             });
         }
 

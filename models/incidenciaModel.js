@@ -402,10 +402,8 @@ static async obtenerEstadisticasPorPlanta() {
 }
 
 
-
 static async buscarCompletaPorId(id) {
     try {
-       
         const [incidencias] = await pool.execute(
             `SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
              FROM incidencias i 
@@ -421,16 +419,19 @@ static async buscarCompletaPorId(id) {
 
         const incidencia = new Incidencia(incidencias[0]);
         
-        // ✅ Cargar fotos
+        // ✅ Cargar fotos CON datos_imagen
         const [fotos] = await pool.execute(
-            `SELECT * FROM incidencia_fotos WHERE incidencia_id = ? ORDER BY tipo, created_at`,
+            `SELECT id, tipo, ruta_archivo, descripcion, datos_imagen, created_at
+             FROM incidencia_fotos 
+             WHERE incidenciaId = ? 
+             ORDER BY tipo, created_at`,
             [id]
         );
         incidencia.fotos = fotos;
         
         // ✅ Cargar materiales
         const [materiales] = await pool.execute(
-            `SELECT * FROM incidencia_materiales WHERE incidencia_id = ? ORDER BY created_at`,
+            `SELECT * FROM incidencia_materiales WHERE incidenciaId = ? ORDER BY created_at`,
             [id]
         );
         incidencia.materiales = materiales;
@@ -440,29 +441,34 @@ static async buscarCompletaPorId(id) {
         throw new Error(`Error al buscar incidencia completa: ${error.message}`);
     }
 }
-
     // ✅ NUEVO: Subir fotos a incidencia
-    static async subirFotos(incidenciaId, fotosData) {
-        try {
-            const fotosInsertadas = [];
-            
-            for (const foto of fotosData) {
-                const [resultado] = await pool.execute(
-                    `INSERT INTO incidencia_fotos (incidencia_id, tipo, ruta_archivo, descripcion) 
-                     VALUES (?, ?, ?, ?)`,
-                    [incidenciaId, foto.tipo, foto.rutaArchivo, foto.descripcion || '']
-                );
-                fotosInsertadas.push({
-                    id: resultado.insertId,
-                    ...foto
-                });
-            }
-            
-            return fotosInsertadas;
-        } catch (error) {
-            throw new Error(`Error al subir fotos: ${error.message}`);
+ static async subirFotos(incidenciaId, fotosData) {
+    try {
+        const fotosInsertadas = [];
+        
+        for (const foto of fotosData) {
+            const [resultado] = await pool.execute(
+                `INSERT INTO incidencia_fotos (incidencia_id, tipo, ruta_archivo, descripcion, datos_imagen) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    incidenciaId, 
+                    foto.tipo, 
+                    foto.rutaArchivo, 
+                    foto.descripcion || '',
+                    foto.datos_imagen 
+                ]
+            );
+            fotosInsertadas.push({
+                id: resultado.insertId,
+                ...foto
+            });
         }
+        
+        return fotosInsertadas;
+    } catch (error) {
+        throw new Error(`Error al subir fotos: ${error.message}`);
     }
+}
 
     // ✅ NUEVO: Agregar materiales a incidencia
     static async agregarMateriales(incidenciaId, materiales) {
