@@ -19,7 +19,7 @@ import {
     eliminarMaterial
 } from "../controllers/incidenciaController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
-import { uploadMultiple } from "../middleware/upload.js"; // ✅ Importar Multer
+import { uploadMultiple } from "../middlewares/upload.js"; // ✅ Importar Multer
 
 const router = express.Router();
 
