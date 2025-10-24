@@ -327,26 +327,16 @@ static async obtenerMetricasConsolidadas() {
         
         const [metricas] = await pool.execute(`
             SELECT 
-               
                 COUNT(*) as totalPlantas,
-             
                 SUM(CASE WHEN incidencias_pendientes > 0 THEN 1 ELSE 0 END) as plantasConIncidencias,
-                
-    
                 SUM(CASE WHEN mantenimientos_pendientes > 0 THEN 1 ELSE 0 END) as plantasConMantenimiento,
-                
-          
                 SUM(CASE WHEN incidencias_pendientes = 0 THEN 1 ELSE 0 END) as plantasOperativas,
-        
                 (SELECT COUNT(*) FROM incidencias WHERE estado = 'pendiente') as incidenciasPendientes,
                 (SELECT COUNT(*) FROM incidencias WHERE estado = 'en_progreso') as incidenciasEnProgreso,
                 (SELECT COUNT(*) FROM incidencias WHERE estado = 'resuelto') as incidenciasResueltas,
-                
-           
                 (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'pendiente') as mantenimientosPendientes,
                 (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'en_progreso') as mantenimientosEnProgreso,
                 (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'completado') as mantenimientosCompletados
-                
             FROM (
                 SELECT 
                     p.id,
@@ -358,22 +348,23 @@ static async obtenerMetricasConsolidadas() {
 
         const resultado = metricas[0];
         
-        console.log('✅ [PLANTA MODEL] Métricas obtenidas:', resultado);
+        console.log('✅ [PLANTA MODEL] Métricas obtenidas (CRUDAS):', resultado);
         
+        // ✅ CORRECCIÓN CRÍTICA: Convertir a números
         return {
-            totalPlantas: parseInt(resultado.totalPlantas) || 0,
-            plantasConIncidencias: parseInt(resultado.plantasConIncidencias) || 0,
-            plantasConMantenimiento: parseInt(resultado.plantasConMantenimiento) || 0,
-            plantasOperativas: parseInt(resultado.plantasOperativas) || 0,
+            totalPlantas: Number(resultado.totalPlantas) || 0,
+            plantasConIncidencias: Number(resultado.plantasConIncidencias) || 0,
+            plantasConMantenimiento: Number(resultado.plantasConMantenimiento) || 0,
+            plantasOperativas: Number(resultado.plantasOperativas) || 0,
             incidencias: {
-                pendientes: parseInt(resultado.incidenciasPendientes) || 0,
-                enProgreso: parseInt(resultado.incidenciasEnProgreso) || 0,
-                resueltas: parseInt(resultado.incidenciasResueltas) || 0
+                pendientes: Number(resultado.incidenciasPendientes) || 0,
+                enProgreso: Number(resultado.incidenciasEnProgreso) || 0,
+                resueltas: Number(resultado.incidenciasResueltas) || 0
             },
             mantenimientos: {
-                pendientes: parseInt(resultado.mantenimientosPendientes) || 0,
-                enProgreso: parseInt(resultado.mantenimientosEnProgreso) || 0,
-                completados: parseInt(resultado.mantenimientosCompletados) || 0
+                pendientes: Number(resultado.mantenimientosPendientes) || 0,
+                enProgreso: Number(resultado.mantenimientosEnProgreso) || 0,
+                completados: Number(resultado.mantenimientosCompletados) || 0
             }
         };
         
@@ -431,33 +422,32 @@ static async obtenerPlantasConEstados() {
             });
         });
         
-        return plantas.map(planta => {
-            const totalIncidencias = parseInt(planta.totalIncidencias) || 0;
-            const incidenciasResueltas = parseInt(planta.incidenciasResueltas) || 0;
-            
-            // ✅ Cálculo CORREGIDO de tasa de resolución
-            const tasaResolucion = totalIncidencias > 0 
-                ? Math.round((incidenciasResueltas / totalIncidencias) * 100)
-                : 100;
+                return plantas.map(planta => {
+                    const totalIncidencias = Number(planta.totalIncidencias) || 0;
+                    const incidenciasResueltas = Number(planta.incidenciasResueltas) || 0;
+                    
+                    const tasaResolucion = totalIncidencias > 0 
+                        ? Math.round((incidenciasResueltas / totalIncidencias) * 100)
+                        : 100;
 
-            return {
-                id: planta.id,
-                nombre: planta.nombre,
-                ubicacion: planta.ubicacion,
-                clienteId: planta.clienteId,
-                tecnicoId: planta.tecnicoId,
-                clienteNombre: planta.clienteNombre,
-                tecnicoNombre: planta.tecnicoNombre,
-                tasaResolucion: tasaResolucion,
-                estados: {
-                    planta: planta.estado,
-                    incidenciasPendientes: parseInt(planta.incidenciasPendientes) || 0,
-                    incidenciasEnProgreso: parseInt(planta.incidenciasEnProgreso) || 0,
-                    incidenciasResueltas: incidenciasResueltas,
-                    mantenimientosPendientes: parseInt(planta.mantenimientosPendientes) || 0
-                }
-            };
-        });
+                    return {
+                        id: planta.id,
+                        nombre: planta.nombre,
+                        ubicacion: planta.ubicacion,
+                        clienteId: planta.clienteId,
+                        tecnicoId: planta.tecnicoId,
+                        clienteNombre: planta.clienteNombre,
+                        tecnicoNombre: planta.tecnicoNombre,
+                        tasaResolucion: tasaResolucion,
+                        estados: {
+                            planta: planta.estado,
+                            incidenciasPendientes: Number(planta.incidenciasPendientes) || 0,
+                            incidenciasEnProgreso: Number(planta.incidenciasEnProgreso) || 0,
+                            incidenciasResueltas: incidenciasResueltas,
+                            mantenimientosPendientes: Number(planta.mantenimientosPendientes) || 0
+                        }
+                    };
+                });
         
     } catch (error) {
         console.error('❌ [PLANTA MODEL] Error en obtenerPlantasConEstados:', error);
