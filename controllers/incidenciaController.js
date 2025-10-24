@@ -440,7 +440,6 @@ export const completarIncidencia = async (req, res) => {
     try {
         const { id } = req.params;
         const { resumenTrabajo, materiales = [] } = req.body;
-        // ❌ QUITAR: const tecnicoCompletoId = req.usuarioId;
 
         if (!resumenTrabajo) {
             return res.status(400).json({
@@ -466,22 +465,34 @@ export const completarIncidencia = async (req, res) => {
             });
         }
 
-        // ✅ SIMPLIFICAR: Solo pasar los datos necesarios
         const datosCompletar = {
             resumenTrabajo,
             materiales
         };
 
+        console.log('🔄 [CONTROLLER] Completando incidencia:', { id, datosCompletar });
+
+        // ✅ COMPLETAR LA INCIDENCIA
         const incidenciaCompletada = await Incidencia.completarIncidencia(id, datosCompletar);
 
+        console.log('✅ [CONTROLLER] Incidencia completada exitosamente');
+
+        // ✅ RESPUESTA CON OPCIÓN DE PDF
         res.status(200).json({
             success: true,
             message: "Incidencia completada correctamente",
-            incidencia: incidenciaCompletada
+            incidencia: incidenciaCompletada,
+            pdfAvailable: true,
+            pdfUrl: `/api/incidencias/${id}/reporte-pdf`,
+            suggestions: [
+                "Puedes descargar el reporte PDF ahora usando el enlace proporcionado",
+                "El PDF incluirá todas las fotos y materiales registrados",
+                "También puedes descargarlo más tarde desde la lista de incidencias"
+            ]
         });
 
     } catch (error) {
-        console.log("Error al completar incidencia:", error);
+        console.log("❌ Error al completar incidencia:", error);
         res.status(500).json({
             success: false,
             message: error.message
