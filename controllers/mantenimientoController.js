@@ -436,9 +436,11 @@ export const completarMantenimiento = async (req, res) => {
         const { 
             resumenTrabajo, 
             materiales = [], 
-            fotos = [],
             checklistCompletado = [] 
         } = req.body;
+
+        // ✅ OBTENER FOTOS DESDE req.files SI EXISTEN
+        const fotos = req.files || [];
 
         if (!resumenTrabajo) {
             return res.status(400).json({
@@ -455,19 +457,30 @@ export const completarMantenimiento = async (req, res) => {
             });
         }
 
-        const datosCompletar = {
-            resumenTrabajo,
-            materiales,
-            fotos,
-            checklistCompletado
-        };
-
         console.log('🔄 [MANTENIMIENTO] Completando mantenimiento:', { 
             id, 
             materialesCount: materiales.length,
             fotosCount: fotos.length,
             checklistCount: checklistCompletado.length
         });
+
+        // ✅ PREPARAR DATOS DE FOTOS SI EXISTEN
+        let fotosData = [];
+        if (fotos.length > 0) {
+            fotosData = fotos.map(file => ({
+                tipo: 'despues',
+                ruta_archivo: `/uploads/mantenimientos/${file.originalname}`,
+                descripcion: `Foto después - ${file.originalname}`,
+                datos_imagen: file.buffer
+            }));
+        }
+
+        const datosCompletar = {
+            resumenTrabajo,
+            materiales,
+            fotos: fotosData, // ✅ USAR FOTOS PREPARADAS
+            checklistCompletado
+        };
 
         const mantenimientoCompletado = await Mantenimiento.completarMantenimiento(id, datosCompletar);
 

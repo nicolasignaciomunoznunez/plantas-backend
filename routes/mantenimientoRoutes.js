@@ -73,6 +73,7 @@ router.post("/:id/iniciar",
 
 router.post("/:id/completar", 
     verificarRol(['admin', 'tecnico']), 
+    uploadMantenimientos.array('fotos', 10), // ✅ AGREGAR MIDDLEWARE DE SUBIDA
     completarMantenimiento
 );
 
