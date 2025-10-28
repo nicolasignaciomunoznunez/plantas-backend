@@ -13,6 +13,10 @@ export class Mantenimiento {
         this.usuario = mantenimiento.usuario; // Para joins
         this.planta = mantenimiento.planta; // Para joins
         this.checklist = mantenimiento.checklist; // Para joins
+        this.fotos = mantenimiento.fotos || [];
+        this.materiales = mantenimiento.materiales || [];
+        this.tecnicoNombre = mantenimiento.tecnicoNombre;
+        this.plantaNombre = mantenimiento.plantaNombre;
     }
 
     // Crear nuevo mantenimiento
@@ -470,7 +474,272 @@ static async obtenerMantenimientosVencidos() {
 
 
 
+// Buscar mantenimiento completo con fotos y materiales
+static async buscarCompletoPorId(id) {
+    try {
+        const [mantenimientos] = await pool.execute(
+            `SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
+             FROM mantenimientos m 
+             LEFT JOIN users u ON m.userId = u.id 
+             LEFT JOIN plants p ON m.plantId = p.id 
+             WHERE m.id = ?`,
+            [id]
+        );
 
+        if (mantenimientos.length === 0) {
+            return null;
+        }
+
+        const mantenimiento = new Mantenimiento(mantenimientos[0]);
+        
+        // Obtener fotos
+        const [fotos] = await pool.execute(
+            `SELECT id, tipo, ruta_archivo, descripcion, datos_imagen, created_at
+             FROM mantenimiento_fotos 
+             WHERE mantenimiento_id = ?
+             ORDER BY tipo, created_at`,
+            [id]
+        );
+        mantenimiento.fotos = fotos;
+        
+        // Obtener materiales
+        const [materiales] = await pool.execute(
+            `SELECT * FROM mantenimiento_materiales 
+             WHERE mantenimiento_id = ?
+             ORDER BY created_at`,
+            [id]
+        );
+        mantenimiento.materiales = materiales;
+
+        // Obtener checklist
+        const checklist = await this.obtenerChecklist(id);
+        mantenimiento.checklist = checklist;
+
+        return mantenimiento;
+    } catch (error) {
+        throw new Error(`Error al buscar mantenimiento completo: ${error.message}`);
+    }
+}
+
+// Subir fotos a mantenimiento
+static async subirFotos(mantenimientoId, fotosData) {
+    try {
+        const fotosInsertadas = [];
+        
+        for (const foto of fotosData) {
+            console.log('📸 [MANTENIMIENTO MODEL] Insertando foto:', {
+                mantenimientoId,
+                tipo: foto.tipo,
+                ruta_archivo: foto.ruta_archivo,
+                descripcion: foto.descripcion,
+                tieneDatosImagen: !!foto.datos_imagen
+            });
+
+            const [resultado] = await pool.execute(
+                `INSERT INTO mantenimiento_fotos (mantenimiento_id, tipo, ruta_archivo, descripcion, datos_imagen) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    mantenimientoId, 
+                    foto.tipo, 
+                    foto.ruta_archivo, 
+                    foto.descripcion || '',
+                    foto.datos_imagen
+                ]
+            );
+            
+            fotosInsertadas.push({
+                id: resultado.insertId,
+                tipo: foto.tipo,
+                ruta_archivo: foto.ruta_archivo,
+                descripcion: foto.descripcion
+            });
+        }
+        
+        return fotosInsertadas;
+    } catch (error) {
+        console.error('❌ [MANTENIMIENTO MODEL] Error en subirFotos:', error);
+        throw new Error(`Error al subir fotos: ${error.message}`);
+    }
+}
+
+// Agregar materiales a mantenimiento
+static async agregarMateriales(mantenimientoId, materiales) {
+    try {
+        const materialesInsertados = [];
+        
+        for (const material of materiales) {
+            const [resultado] = await pool.execute(
+                `INSERT INTO mantenimiento_materiales (mantenimiento_id, material_nombre, cantidad, unidad, costo) 
+                 VALUES (?, ?, ?, ?, ?)`,
+                [
+                    mantenimientoId,
+                    material.material_nombre,
+                    material.cantidad,
+                    material.unidad,
+                    material.costo || 0
+                ]
+            );
+            materialesInsertados.push({
+                id: resultado.insertId,
+                ...material
+            });
+        }
+        
+        return materialesInsertados;
+    } catch (error) {
+        throw new Error(`Error al agregar materiales: ${error.message}`);
+    }
+}
+
+// Completar mantenimiento con fotos, materiales y checklist
+static async completarMantenimiento(id, datosCompletar) {
+    try {
+        const { 
+            resumenTrabajo, 
+            materiales = [], 
+            fotos = [],
+            checklistCompletado = []
+        } = datosCompletar;
+        
+        console.log('🔄 [MANTENIMIENTO MODEL] Completando mantenimiento:', { 
+            id, 
+            materialesCount: materiales.length,
+            fotosCount: fotos.length,
+            checklistCount: checklistCompletado.length
+        });
+
+        // Actualizar mantenimiento
+        const [result] = await pool.execute(
+            `UPDATE mantenimientos 
+             SET estado = 'completado', 
+                 fechaRealizada = NOW(),
+                 descripcion = CONCAT(COALESCE(descripcion, ''), 
+                                   CASE WHEN COALESCE(descripcion, '') != '' THEN '\n\n' ELSE '' END,
+                                   'RESUMEN EJECUCIÓN: ', ?)
+             WHERE id = ?`,
+            [resumenTrabajo, id]
+        );
+
+        console.log('✅ [MANTENIMIENTO MODEL] Mantenimiento actualizado:', result.affectedRows);
+
+        // Agregar materiales si existen
+        if (materiales && materiales.length > 0) {
+            console.log('📦 [MANTENIMIENTO MODEL] Agregando materiales:', materiales.length);
+            await this.agregarMateriales(id, materiales);
+        }
+
+        // Agregar fotos si existen
+        if (fotos && fotos.length > 0) {
+            console.log('📸 [MANTENIMIENTO MODEL] Agregando fotos:', fotos.length);
+            await this.subirFotos(id, fotos);
+        }
+
+        // Actualizar checklist si existe
+        if (checklistCompletado && checklistCompletado.length > 0) {
+            console.log('✅ [MANTENIMIENTO MODEL] Actualizando checklist:', checklistCompletado.length);
+            for (const item of checklistCompletado) {
+                await this.actualizarItemChecklist(item.id, {
+                    completado: item.completado,
+                    observaciones: item.observaciones
+                });
+            }
+        }
+
+        return await this.buscarCompletoPorId(id);
+    } catch (error) {
+        console.error('❌ [MANTENIMIENTO MODEL] Error en completarMantenimiento:', error);
+        throw new Error(`Error al completar mantenimiento: ${error.message}`);
+    }
+}
+
+// Obtener estadísticas para reporte PDF
+static async obtenerEstadisticasReporte(mantenimientoId) {
+    try {
+        const [estadisticas] = await pool.execute(`
+            SELECT 
+                m.*,
+                p.nombre as planta_nombre,
+                p.ubicacion as planta_ubicacion,
+                u.nombre as tecnico_nombre,
+                (SELECT COUNT(*) FROM mantenimiento_fotos WHERE mantenimiento_id = ? AND tipo = 'antes') as fotos_antes,
+                (SELECT COUNT(*) FROM mantenimiento_fotos WHERE mantenimiento_id = ? AND tipo = 'despues') as fotos_despues,
+                (SELECT COUNT(*) FROM mantenimiento_materiales WHERE mantenimiento_id = ?) as total_materiales,
+                (SELECT SUM(cantidad * costo) FROM mantenimiento_materiales WHERE mantenimiento_id = ?) as costo_total_materiales,
+                (SELECT COUNT(*) FROM mantenimiento_checklist WHERE mantenimientoId = ?) as total_checklist,
+                (SELECT COUNT(*) FROM mantenimiento_checklist WHERE mantenimientoId = ? AND completado = 1) as checklist_completados
+            FROM mantenimientos m
+            LEFT JOIN plants p ON m.plantId = p.id
+            LEFT JOIN users u ON m.userId = u.id
+            WHERE m.id = ?
+        `, [mantenimientoId, mantenimientoId, mantenimientoId, mantenimientoId, mantenimientoId, mantenimientoId, mantenimientoId]);
+
+        if (estadisticas.length === 0) {
+            return null;
+        }
+
+        return estadisticas[0];
+    } catch (error) {
+        throw new Error(`Error al obtener estadísticas: ${error.message}`);
+    }
+}
+
+// Eliminar foto de mantenimiento
+static async eliminarFoto(fotoId) {
+    try {
+        const [resultado] = await pool.execute(
+            `DELETE FROM mantenimiento_fotos WHERE id = ?`,
+            [fotoId]
+        );
+        return resultado.affectedRows > 0;
+    } catch (error) {
+        throw new Error(`Error al eliminar foto: ${error.message}`);
+    }
+}
+
+// Eliminar material de mantenimiento
+static async eliminarMaterial(materialId) {
+    try {
+        const [resultado] = await pool.execute(
+            `DELETE FROM mantenimiento_materiales WHERE id = ?`,
+            [materialId]
+        );
+        return resultado.affectedRows > 0;
+    } catch (error) {
+        throw new Error(`Error al eliminar material: ${error.message}`);
+    }
+}
+
+// Iniciar mantenimiento (subir fotos "antes")
+static async iniciarMantenimiento(id, fotosAntes = []) {
+    try {
+        console.log('🔄 [MANTENIMIENTO MODEL] Iniciando mantenimiento:', { 
+            id, 
+            fotosAntesCount: fotosAntes.length 
+        });
+
+        // Actualizar estado
+        const [result] = await pool.execute(
+            `UPDATE mantenimientos 
+             SET estado = 'en_progreso'
+             WHERE id = ?`,
+            [id]
+        );
+
+        // Subir fotos "antes" si existen
+        if (fotosAntes && fotosAntes.length > 0) {
+            console.log('📸 [MANTENIMIENTO MODEL] Subiendo fotos "antes":', fotosAntes.length);
+            await this.subirFotos(id, fotosAntes.map(foto => ({
+                ...foto,
+                tipo: 'antes'
+            })));
+        }
+
+        return await this.buscarCompletoPorId(id);
+    } catch (error) {
+        console.error('❌ [MANTENIMIENTO MODEL] Error en iniciarMantenimiento:', error);
+        throw new Error(`Error al iniciar mantenimiento: ${error.message}`);
+    }
+}
 
 
 
