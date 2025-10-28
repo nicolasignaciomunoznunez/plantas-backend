@@ -3,19 +3,19 @@ import { Usuario } from "../models/usuarioModel.js";
 
 export const crearPlanta = async (req, res) => {
     try {
-        const { nombre, ubicacion, clienteId } = req.body;
+        const { nombre, ubicacion } = req.body; // ❌ ELIMINAR: clienteId
 
-        if (!nombre || !ubicacion || !clienteId) {
+        if (!nombre || !ubicacion) { // ❌ ELIMINAR: || !clienteId
             return res.status(400).json({
                 success: false,
-                message: "Nombre, ubicación y clienteId son requeridos"
+                message: "Nombre y ubicación son requeridos" // Actualizar mensaje
             });
         }
 
         const nuevaPlanta = await Planta.crear({
             nombre,
-            ubicacion,
-            clienteId
+            ubicacion
+            // ❌ ELIMINAR: clienteId
         });
 
         res.status(201).json({
@@ -31,7 +31,6 @@ export const crearPlanta = async (req, res) => {
         });
     }
 };
-
 export const obtenerPlanta = async (req, res) => {
     try {
         const { id } = req.params;
@@ -370,46 +369,9 @@ export const obtenerPlantasUsuario = async (req, res) => {
     });
   }
 };
-// ✅ Obtener planta completa con técnicos y clientes
-// ✅ Obtener todas las plantas con relaciones completas - ACTUALIZADO
-export const obtenerPlantasCompleta = async (req, res) => {
-  try {
-    const { limite = 50, pagina = 1 } = req.query;
-    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
 
-    console.log('🔍 [PLANTA CONTROLLER] Obteniendo todas las plantas completas');
 
-    // ✅ CORREGIDO: Pasar filtros al modelo
-    const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
 
-    const plantasCompletas = await Promise.all(
-      plantas.map(async (planta) => {
-        try {
-          return await Planta.obtenerPlantasCompletas(planta.id);
-        } catch (error) {
-          console.error(`Error obteniendo planta completa ${planta.id}:`, error);
-          return planta;
-        }
-      })
-    );
-
-    res.status(200).json({
-      success: true,
-      plantas: plantasCompletas,
-      paginacion: {
-        limite: parseInt(limite),
-        pagina: parseInt(pagina)
-      }
-    });
-
-  } catch (error) {
-    console.log("❌ [PLANTA CONTROLLER] Error obteniendo plantas completas:", error);
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
 // ✅ Asignar múltiples técnicos a una planta
 export const asignarMultiplesTecnicos = async (req, res) => {
   try {

@@ -5,19 +5,19 @@ export class Planta {
         this.id = planta.id;
         this.nombre = planta.nombre;
         this.ubicacion = planta.ubicacion;
-        this.clienteId = planta.clienteId;
-        this.tecnicoId = planta.tecnicoId;
-        this.cliente = planta.cliente; // Para joins
-        this.tecnico = planta.tecnico; // Para joins
+        // ❌ ELIMINAR: this.clienteId = planta.clienteId;
+        // ❌ ELIMINAR: this.tecnicoId = planta.tecnicoId;
+        // ❌ ELIMINAR: this.cliente = planta.cliente;
+        // ❌ ELIMINAR: this.tecnico = planta.tecnico;
     }
 
-    // Crear nueva planta
+    // Crear nueva planta (SIN clienteId)
     static async crear(datosPlanta) {
         try {
             const [resultado] = await pool.execute(
-                `INSERT INTO plants (nombre, ubicacion, clienteId) 
-                 VALUES (?, ?, ?)`,
-                [datosPlanta.nombre, datosPlanta.ubicacion, datosPlanta.clienteId]
+                `INSERT INTO plants (nombre, ubicacion) 
+                 VALUES (?, ?)`,
+                [datosPlanta.nombre, datosPlanta.ubicacion]
             );
 
             return await this.buscarPorId(resultado.insertId);
@@ -26,18 +26,12 @@ export class Planta {
         }
     }
 
-    // Buscar planta por ID
+    // Buscar planta por ID (SIN joins de cliente/tecnico)
     static async buscarPorId(id) {
         try {
             const [plantas] = await pool.execute(
-                `SELECT p.*, 
-                        u.nombre as clienteNombre, 
-                        u.email as clienteEmail,
-                        ut.nombre as tecnicoNombre,
-                        ut.email as tecnicoEmail
+                `SELECT p.*
                  FROM plants p 
-                 LEFT JOIN users u ON p.clienteId = u.id 
-                 LEFT JOIN users ut ON p.tecnicoId = ut.id
                  WHERE p.id = ?`,
                 [id]
             );
@@ -52,73 +46,58 @@ export class Planta {
         }
     }
 
-    // Obtener todas las plantas
-static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
-    try {
-        const limiteNum = Number(limite);
-        const paginaNum = Number(pagina);
-        
-        if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
-            throw new Error('Parámetros de paginación inválidos');
+    // Obtener todas las plantas (SIN joins de cliente/tecnico)
+    static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
+        try {
+            const limiteNum = Number(limite);
+            const paginaNum = Number(pagina);
+            
+            if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
+                throw new Error('Parámetros de paginación inválidos');
+            }
+            
+            const offset = (paginaNum - 1) * limiteNum;
+            
+            let whereClause = 'WHERE 1=1';
+            const valores = [];
+            
+            // ✅ CORREGIDO: Usar filtros.plantaIds del middleware
+            if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+                const placeholders = filtros.plantaIds.map(() => '?').join(',');
+                whereClause += ` AND p.id IN (${placeholders})`;
+                valores.push(...filtros.plantaIds);
+                console.log('🔍 [PLANTA MODEL] Filtro por plantaIds:', filtros.plantaIds);
+            }
+            
+            // ❌ ELIMINAR: Filtros por tecnicoId y clienteId (ya no existen)
+            
+            console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
+            
+            const query = `
+                SELECT p.*
+                FROM plants p 
+                ${whereClause}
+                ORDER BY p.nombre 
+                LIMIT ? OFFSET ?
+            `;
+            
+            valores.push(limiteNum, offset);
+            
+            console.log('🔍 [PLANTA MODEL] Query final:', query);
+            console.log('🔍 [PLANTA MODEL] Valores:', valores);
+            
+            const [plantas] = await pool.execute(query, valores);
+            
+            console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
+            return plantas.map(planta => new Planta(planta));
+            
+        } catch (error) {
+            console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
+            throw new Error(`Error al obtener plantas: ${error.message}`);
         }
-        
-        const offset = (paginaNum - 1) * limiteNum;
-        
-        let whereClause = 'WHERE 1=1';
-        const valores = []; // ✅ NUEVO: Array para valores parametrizados
-        
-        // ✅ CORREGIDO: Usar filtros.plantaIds del middleware
-        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
-            // Crear placeholders para el IN clause
-            const placeholders = filtros.plantaIds.map(() => '?').join(',');
-            whereClause += ` AND p.id IN (${placeholders})`;
-            valores.push(...filtros.plantaIds);
-            console.log('🔍 [PLANTA MODEL] Filtro por plantaIds:', filtros.plantaIds);
-        }
-        
-        // ✅ MANTENER filtros existentes pero parametrizados
-        if (filtros.tecnicoId) {
-            whereClause += ` AND p.tecnicoId = ?`;
-            valores.push(filtros.tecnicoId);
-        }
-        
-        if (filtros.clienteId) {
-            whereClause += ` AND p.clienteId = ?`;
-            valores.push(filtros.clienteId);
-        }
-        
-        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
-        
-        const query = `
-            SELECT p.*, 
-                   u.nombre as clienteNombre,
-                   ut.nombre as tecnicoNombre
-            FROM plants p 
-            LEFT JOIN users u ON p.clienteId = u.id 
-            LEFT JOIN users ut ON p.tecnicoId = ut.id
-            ${whereClause}
-            ORDER BY p.nombre 
-            LIMIT ? OFFSET ?
-        `;
-        
-        // ✅ AGREGAR límite y offset a los valores
-        valores.push(limiteNum, offset);
-        
-        console.log('🔍 [PLANTA MODEL] Query final:', query);
-        console.log('🔍 [PLANTA MODEL] Valores:', valores);
-        
-        const [plantas] = await pool.execute(query, valores);
-        
-        console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
-        return plantas.map(planta => new Planta(planta));
-        
-    } catch (error) {
-        console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
-        throw new Error(`Error al obtener plantas: ${error.message}`);
     }
-}
 
-    // ✅ CORREGIDO: Obtener plantas por cliente (busca en usuario_plantas)
+    // Obtener plantas por cliente (sistema muchos-a-muchos)
     static async obtenerPorCliente(clienteId) {
         try {
             const [plantas] = await pool.execute(
@@ -136,10 +115,10 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         }
     }
 
-    // Actualizar planta
+    // Actualizar planta (SIN clienteId/tecnicoId)
     static async actualizar(id, datosActualizados) {
         try {
-            const camposPermitidos = ['nombre', 'ubicacion', 'clienteId', 'tecnicoId'];
+            const camposPermitidos = ['nombre', 'ubicacion']; // ❌ ELIMINAR: 'clienteId', 'tecnicoId'
             const camposParaActualizar = [];
             const valores = [];
 
@@ -182,60 +161,27 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         }
     }
 
-    // ✅ MÉTODOS PARA TÉCNICOS (1-a-1 - MANTENER POR COMPATIBILIDAD)
-    static async asignarTecnico(plantaId, tecnicoId) {
+    // ❌ ELIMINAR: Métodos 1-a-1 obsoletos (asignarTecnico, desasignarTecnico)
+
+    // Obtener plantas por técnico (sistema muchos-a-muchos)
+    static async obtenerPorTecnico(tecnicoId) {
         try {
-            const [resultado] = await pool.execute(
-                `UPDATE plants SET tecnicoId = ? WHERE id = ?`,
-                [tecnicoId, plantaId]
+            const [plantas] = await pool.execute(
+                `SELECT p.*
+                 FROM plants p 
+                 INNER JOIN usuario_plantas up ON p.id = up.planta_id
+                 WHERE up.usuario_id = ? AND up.tipo_usuario = 'tecnico'
+                 ORDER BY p.nombre`,
+                [tecnicoId]
             );
 
-            if (resultado.affectedRows === 0) {
-                throw new Error('Planta no encontrada');
-            }
-
-            return await this.buscarPorId(plantaId);
+            return plantas.map(planta => new Planta(planta));
         } catch (error) {
-            throw new Error(`Error asignando técnico: ${error.message}`);
+            throw new Error(`Error obteniendo plantas del técnico: ${error.message}`);
         }
     }
 
-    static async desasignarTecnico(plantaId) {
-        try {
-            const [resultado] = await pool.execute(
-                `UPDATE plants SET tecnicoId = NULL WHERE id = ?`,
-                [plantaId]
-            );
-
-            if (resultado.affectedRows === 0) {
-                throw new Error('Planta no encontrada');
-            }
-
-            return await this.buscarPorId(plantaId);
-        } catch (error) {
-            throw new Error(`Error desasignando técnico: ${error.message}`);
-        }
-    }
-
-static async obtenerPorTecnico(tecnicoId) {
-    try {
-        const [plantas] = await pool.execute(
-            `SELECT p.*, u.nombre as clienteNombre 
-             FROM plants p 
-             INNER JOIN usuario_plantas up ON p.id = up.planta_id
-             LEFT JOIN users u ON p.clienteId = u.id 
-             WHERE up.usuario_id = ? AND up.tipo_usuario = 'tecnico'
-             ORDER BY p.nombre`,
-            [tecnicoId]
-        );
-
-        return plantas.map(planta => new Planta(planta));
-    } catch (error) {
-        throw new Error(`Error obteniendo plantas del técnico: ${error.message}`);
-    }
-}
-
-    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA TÉCNICOS
+    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA TÉCNICOS (MANTENER)
     static async asignarTecnicos(plantaId, tecnicosIds) {
         try {
             // Eliminar técnicos existentes para esta planta
@@ -274,7 +220,7 @@ static async obtenerPorTecnico(tecnicoId) {
         }
     }
 
-    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA CLIENTES
+    // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA CLIENTES (MANTENER)
     static async asignarClientes(plantaId, clientesIds) {
         try {
             // Eliminar clientes existentes para esta planta
@@ -331,12 +277,9 @@ static async obtenerPorTecnico(tecnicoId) {
             throw new Error(`Error obteniendo planta completa: ${error.message}`);
         }
     }
-        
 
-
-
-    /////////////////////////// nuevos metodos
-
+    // ✅ MÉTODO CORREGIDO: obtenerMetricasConsolidadas
+  // ✅ MÉTODO CORREGIDO: obtenerMetricasConsolidadas
 static async obtenerMetricasConsolidadas(filtros = {}) {
     try {
         console.log('📊 [PLANTA MODEL] Obteniendo métricas - Filtros:', filtros);
@@ -347,31 +290,31 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
         // ✅ AGREGAR FILTRO por plantaIds
         if (filtros.plantaIds && filtros.plantaIds.length > 0) {
             const placeholders = filtros.plantaIds.map(() => '?').join(',');
-            whereClause += ` AND p.id IN (${placeholders})`;
+            whereClause += ` AND id IN (${placeholders})`;
             valores.push(...filtros.plantaIds);
         }
         
-        // ✅ CONSULTA COMPLETAMENTE CORREGIDA
+        // ✅ CONSULTA SIMPLIFICADA Y CORREGIDA
         const query = `
             SELECT 
                 COUNT(*) as totalPlantas,
-                SUM(CASE WHEN incidencias_pendientes > 0 THEN 1 ELSE 0 END) as plantasConIncidencias,
-                SUM(CASE WHEN mantenimientos_pendientes > 0 THEN 1 ELSE 0 END) as plantasConMantenimiento,
-                SUM(CASE WHEN incidencias_pendientes = 0 THEN 1 ELSE 0 END) as plantasOperativas,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'pendiente') as incidenciasPendientes,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'en_progreso') as incidenciasEnProgreso,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'resuelto') as incidenciasResueltas,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'pendiente') as mantenimientosPendientes,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'en_progreso') as mantenimientosEnProgreso,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'completado') as mantenimientosCompletados
-            FROM (
-                SELECT 
-                    p.id,
-                    (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidencias_pendientes,
-                    (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientos_pendientes
-                FROM plants p
-                ${whereClause}
-            ) as plantas_metrics
+                (SELECT COUNT(*) FROM plants ${whereClause} AND id IN (
+                    SELECT DISTINCT plantId FROM incidencias WHERE estado = 'pendiente'
+                )) as plantasConIncidencias,
+                (SELECT COUNT(*) FROM plants ${whereClause} AND id IN (
+                    SELECT DISTINCT plantId FROM mantenimientos WHERE estado = 'pendiente'
+                )) as plantasConMantenimiento,
+                (SELECT COUNT(*) FROM plants ${whereClause} AND id NOT IN (
+                    SELECT DISTINCT plantId FROM incidencias WHERE estado IN ('pendiente', 'en_progreso')
+                )) as plantasOperativas,
+                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente') as incidenciasPendientes,
+                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'en_progreso') as incidenciasEnProgreso,
+                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'resuelto') as incidenciasResueltas,
+                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente') as mantenimientosPendientes,
+                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'en_progreso') as mantenimientosEnProgreso,
+                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'completado') as mantenimientosCompletados
+            FROM plants
+            ${whereClause}
         `;
 
         console.log('🔍 [PLANTA MODEL] Query métricas:', query);
