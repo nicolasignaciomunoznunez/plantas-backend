@@ -278,8 +278,7 @@ export class Planta {
         }
     }
 
-    // ✅ MÉTODO CORREGIDO: obtenerMetricasConsolidadas
-  // ✅ MÉTODO CORREGIDO: obtenerMetricasConsolidadas
+   
 static async obtenerMetricasConsolidadas(filtros = {}) {
     try {
         console.log('📊 [PLANTA MODEL] Obteniendo métricas - Filtros:', filtros);
@@ -294,7 +293,7 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
             valores.push(...filtros.plantaIds);
         }
         
-        // ✅ CONSULTA SIMPLIFICADA Y CORREGIDA
+        // ✅ CONSULTA COMPLETAMENTE CORREGIDA Y SIMPLIFICADA
         const query = `
             SELECT 
                 COUNT(*) as totalPlantas,

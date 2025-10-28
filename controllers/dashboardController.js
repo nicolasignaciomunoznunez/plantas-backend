@@ -3,46 +3,55 @@ import { DatoPlanta } from '../models/datoPlantaModel.js';
 import { Incidencia } from '../models/incidenciaModel.js';
 import { Mantenimiento } from '../models/mantenimientoModel.js';
 
-// ✅ CACHE EN MEMORIA (mismo patrón que auth)
+// ✅ CACHE EN MEMORIA MEJORADO (soporta múltiples usuarios)
 let dashboardCache = {
-  metricas: null,
-  plantas: null,
-  lastFetch: null,
+  data: {}, // Objeto para almacenar cache por usuario
   CACHE_TTL: 5 * 60 * 1000, // 5 minutos
 };
 
-// ✅ FUNCIONES DE CACHE
-const getDashboardCache = (key) => {
-  if (dashboardCache[key] && dashboardCache.lastFetch && 
-      (Date.now() - dashboardCache.lastFetch) < dashboardCache.CACHE_TTL) {
-    console.log('✅ [DASHBOARD CACHE] Usando cache para:', key);
-    return dashboardCache[key];
+// ✅ FUNCIONES DE CACHE MEJORADAS
+const getDashboardCache = (usuarioId, key) => {
+  const cacheKey = `${usuarioId}:${key}`;
+  
+  if (dashboardCache.data[cacheKey] && 
+      (Date.now() - dashboardCache.data[cacheKey].timestamp) < dashboardCache.CACHE_TTL) {
+    console.log('✅ [DASHBOARD CACHE] Usando cache para:', cacheKey);
+    return dashboardCache.data[cacheKey].data;
   }
   return null;
 };
 
-const updateDashboardCache = (key, data) => {
-  dashboardCache[key] = data;
-  dashboardCache.lastFetch = Date.now();
-  console.log('✅ [DASHBOARD CACHE] Actualizado cache para:', key);
+const updateDashboardCache = (usuarioId, key, data) => {
+  const cacheKey = `${usuarioId}:${key}`;
+  dashboardCache.data[cacheKey] = {
+    data,
+    timestamp: Date.now()
+  };
+  console.log('✅ [DASHBOARD CACHE] Actualizado cache para:', cacheKey);
 };
 
-const clearDashboardCache = () => {
-  dashboardCache.metricas = null;
-  dashboardCache.plantas = null;
-  dashboardCache.lastFetch = null;
-  console.log('✅ [DASHBOARD CACHE] Cache limpiado');
+const clearUserCache = (usuarioId) => {
+  Object.keys(dashboardCache.data).forEach(key => {
+    if (key.startsWith(`${usuarioId}:`)) {
+      delete dashboardCache.data[key];
+    }
+  });
+  console.log(`✅ [DASHBOARD CACHE] Cache limpiado para usuario: ${usuarioId}`);
+};
+
+const clearAllCache = () => {
+  dashboardCache.data = {};
+  console.log('✅ [DASHBOARD CACHE] Cache global limpiado');
 };
 
 export const obtenerMetricas = async (req, res) => {
   try {
-    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+    const { filtrosPlanta = {} } = req;
     
     console.log('📊 [DASHBOARD] Obteniendo métricas - Filtros:', filtrosPlanta);
     
-    // ✅ CACHE POR USUARIO (cada usuario ve métricas diferentes)
-    const cacheKey = `metricas:${req.usuarioId}`;
-    const cachedMetrics = getDashboardCache(cacheKey);
+    // ✅ CACHE MEJORADO
+    const cachedMetrics = getDashboardCache(req.usuarioId, 'metricas');
     if (cachedMetrics) {
       return res.status(200).json({
         success: true,
@@ -57,15 +66,15 @@ export const obtenerMetricas = async (req, res) => {
     // ✅ CORREGIDO: Pasar filtros al modelo
     const metricas = await Planta.obtenerMetricasConsolidadas(filtrosPlanta);
 
-    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
-    updateDashboardCache(cacheKey, metricas);
+    // ✅ GUARDAR EN CACHE MEJORADO
+    updateDashboardCache(req.usuarioId, 'metricas', metricas);
 
     res.status(200).json({
       success: true,
       metricas,
       fromCache: false,
       message: "Métricas obtenidas correctamente",
-      filtrosAplicados: filtrosPlanta // Para debug
+      filtrosAplicados: filtrosPlanta
     });
   } catch (error) {
     console.error("❌ [DASHBOARD] Error al obtener métricas:", error);
@@ -78,13 +87,12 @@ export const obtenerMetricas = async (req, res) => {
 
 export const obtenerPlantasDashboard = async (req, res) => {
   try {
-    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+    const { filtrosPlanta = {} } = req;
     
     console.log('🏭 [DASHBOARD] Obteniendo plantas para dashboard - Filtros:', filtrosPlanta);
     
-    // ✅ CACHE POR USUARIO
-    const cacheKey = `plantas:${req.usuarioId}`;
-    const cachedPlantas = getDashboardCache(cacheKey);
+    // ✅ CACHE MEJORADO
+    const cachedPlantas = getDashboardCache(req.usuarioId, 'plantas');
     if (cachedPlantas) {
       return res.status(200).json({
         success: true,
@@ -99,15 +107,15 @@ export const obtenerPlantasDashboard = async (req, res) => {
     // ✅ CORREGIDO: Pasar filtros al modelo
     const plantas = await Planta.obtenerPlantasConEstados(filtrosPlanta);
 
-    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
-    updateDashboardCache(cacheKey, plantas);
+    // ✅ GUARDAR EN CACHE MEJORADO
+    updateDashboardCache(req.usuarioId, 'plantas', plantas);
 
     res.status(200).json({
       success: true,
       plantas,
       fromCache: false,
       message: "Plantas obtenidas correctamente",
-      filtrosAplicados: filtrosPlanta // Para debug
+      filtrosAplicados: filtrosPlanta
     });
   } catch (error) {
     console.error("❌ [DASHBOARD] Error al obtener plantas:", error);
@@ -120,13 +128,12 @@ export const obtenerPlantasDashboard = async (req, res) => {
 
 export const obtenerDashboardCompleto = async (req, res) => {
   try {
-    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+    const { filtrosPlanta = {} } = req;
     
     console.log('🎯 [DASHBOARD] Obteniendo dashboard completo - Filtros:', filtrosPlanta);
     
-    // ✅ CACHE POR USUARIO
-    const cacheKey = `completo:${req.usuarioId}`;
-    const cachedDashboard = getDashboardCache(cacheKey);
+    // ✅ CACHE MEJORADO
+    const cachedDashboard = getDashboardCache(req.usuarioId, 'completo');
     if (cachedDashboard) {
       return res.status(200).json({
         success: true,
@@ -138,12 +145,12 @@ export const obtenerDashboardCompleto = async (req, res) => {
 
     console.log('🔄 [DASHBOARD] Consultando base de datos para dashboard completo...');
     
-    // ✅ CORREGIDO: Pasar filtros a TODOS los modelos
+    // ✅ USAR LA VERSIÓN SIMPLE DEL MÉTODO DE MÉTRICAS
     const [metricas, plantas, incidenciasRecientes, mantenimientosPendientes] = await Promise.all([
       Planta.obtenerMetricasConsolidadas(filtrosPlanta),
       Planta.obtenerPlantasConEstados(filtrosPlanta),
-      Incidencia.obtenerRecientes(10, filtrosPlanta), // ✅ Pasar filtros
-      Mantenimiento.obtenerPendientesProximos(10, filtrosPlanta) // ✅ Pasar filtros
+      Incidencia.obtenerRecientes(10, filtrosPlanta),
+      Mantenimiento.obtenerPendientesProximos(10, filtrosPlanta)
     ]);
 
     const dashboardData = {
@@ -152,11 +159,11 @@ export const obtenerDashboardCompleto = async (req, res) => {
       incidenciasRecientes,
       mantenimientosPendientes,
       timestamp: new Date().toISOString(),
-      filtrosAplicados: filtrosPlanta // Para debug
+      filtrosAplicados: filtrosPlanta
     };
 
-    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
-    updateDashboardCache(cacheKey, dashboardData);
+    // ✅ GUARDAR EN CACHE MEJORADO
+    updateDashboardCache(req.usuarioId, 'completo', dashboardData);
 
     res.status(200).json({
       success: true,
@@ -173,22 +180,16 @@ export const obtenerDashboardCompleto = async (req, res) => {
   }
 };
 
-// ✅ INVALIDAR CACHE CUANDO HAY CAMBIOS
-// ✅ INVALIDAR CACHE CUANDO HAY CAMBIOS
+// ✅ INVALIDAR CACHE MEJORADO
 export const invalidarCacheDashboard = async (req, res) => {
   try {
-    const { usuarioId } = req.query; // Opcional: invalidar cache de usuario específico
+    const { usuarioId } = req.query;
     
     if (usuarioId) {
-      // Invalidar solo cache de un usuario
-      const keys = ['metricas', 'plantas', 'completo'].map(key => `${key}:${usuarioId}`);
-      keys.forEach(key => {
-        dashboardCache[key] = null;
-      });
+      clearUserCache(usuarioId);
       console.log(`🔄 [DASHBOARD] Cache invalidado para usuario: ${usuarioId}`);
     } else {
-      // Invalidar todo el cache
-      clearDashboardCache();
+      clearAllCache();
       console.log('🔄 [DASHBOARD] Cache global invalidado manualmente');
     }
     
@@ -207,19 +208,26 @@ export const invalidarCacheDashboard = async (req, res) => {
   }
 };
 
-// ✅ ENDPOINT DE ESTADO DEL CACHE (para debugging)
+// ✅ ENDPOINT DE ESTADO DEL CACHE MEJORADO
 export const obtenerEstadoCache = async (req, res) => {
   try {
+    const userCaches = Object.keys(dashboardCache.data)
+      .filter(key => key.startsWith(`${req.usuarioId}:`))
+      .map(key => {
+        const cache = dashboardCache.data[key];
+        return {
+          key,
+          timestamp: cache.timestamp,
+          tiempoDesdeActualizacion: Date.now() - cache.timestamp,
+          estaExpirado: (Date.now() - cache.timestamp) > dashboardCache.CACHE_TTL
+        };
+      });
+
     const estado = {
-      tieneCacheMetricas: !!dashboardCache.metricas,
-      tieneCachePlantas: !!dashboardCache.plantas,
-      lastFetch: dashboardCache.lastFetch,
-      tiempoDesdeUltimaActualizacion: dashboardCache.lastFetch 
-        ? Date.now() - dashboardCache.lastFetch 
-        : null,
-      estaExpirado: dashboardCache.lastFetch 
-        ? (Date.now() - dashboardCache.lastFetch) > dashboardCache.CACHE_TTL
-        : true
+      usuarioId: req.usuarioId,
+      cachesUsuario: userCaches,
+      totalCaches: Object.keys(dashboardCache.data).length,
+      CACHE_TTL: dashboardCache.CACHE_TTL
     };
 
     res.status(200).json({
