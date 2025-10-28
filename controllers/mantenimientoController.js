@@ -550,6 +550,7 @@ export const eliminarMaterial = async (req, res) => {
 };
 
 // ✅ Generar reporte PDF de mantenimiento
+// ✅ Generar reporte PDF de mantenimiento - VERSIÓN MEJORADA Y SIMPLIFICADA
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
@@ -562,9 +563,6 @@ export const generarReportePDF = async (req, res) => {
         if (!mantenimiento) {
             return res.status(404).json({ success: false, message: "Mantenimiento no encontrado" });
         }
-
-        // Obtener estadísticas para el reporte
-        const estadisticas = await Mantenimiento.obtenerEstadisticasReporte(id);
 
         // Crear documento PDF
         const doc = new PDFDocument({ 
@@ -590,267 +588,395 @@ export const generarReportePDF = async (req, res) => {
         // Pipe el PDF a la respuesta
         doc.pipe(res);
 
-        // ✅ TÍTULO DEL REPORTE
+        // ========== ENCABEZADO Y TÍTULO ==========
         doc.fontSize(20)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
            .text('REPORTE DE MANTENIMIENTO', 50, 50, { align: 'center' });
 
-        // ✅ INFORMACIÓN BÁSICA
+        doc.fontSize(10)
+           .font('Helvetica')
+           .fillColor('#666666')
+           .text(`ID: #${mantenimiento.id}`, 50, 80, { align: 'center' });
+
+        // Línea decorativa
+        doc.moveTo(50, 95).lineTo(545, 95).strokeColor('#2c5aa0').lineWidth(1).stroke();
+
+        // ========== INFORMACIÓN GENERAL ==========
         let yPosition = 120;
         
-        doc.fontSize(12)
-           .font('Helvetica-Bold')
-           .fillColor('#000000')
-           .text('INFORMACIÓN BÁSICA', 50, yPosition);
-        
-        yPosition += 25;
-        
-        doc.font('Helvetica')
-           .text(`ID de Mantenimiento: ${mantenimiento.id}`, 50, yPosition)
-           .text(`Tipo: ${mantenimiento.tipo.toUpperCase()}`, 250, yPosition);
-        
-        yPosition += 15;
-        doc.text(`Planta: ${mantenimiento.plantaNombre}`, 50, yPosition)
-           .text(`Estado: ${mantenimiento.estado.toUpperCase()}`, 250, yPosition);
-        
-        yPosition += 15;
-        doc.text(`Técnico: ${mantenimiento.tecnicoNombre}`, 50, yPosition)
-           .text(`Fecha programada: ${new Date(mantenimiento.fechaProgramada).toLocaleDateString('es-ES')}`, 250, yPosition);
-        
-        if (mantenimiento.estado === 'completado' && mantenimiento.fechaRealizada) {
-            yPosition += 15;
-            doc.text(`Fecha de realización: ${new Date(mantenimiento.fechaRealizada).toLocaleDateString('es-ES')}`, 50, yPosition);
-        }
-
-        yPosition += 30;
-
-        // ✅ DESCRIPCIÓN Y RESUMEN
-        doc.font('Helvetica-Bold')
-           .text('DESCRIPCIÓN DEL MANTENIMIENTO:', 50, yPosition);
-        
-        yPosition += 20;
-        
-        doc.font('Helvetica')
-           .fontSize(10)
-           .text(mantenimiento.descripcion, 50, yPosition, { 
-               width: 500, 
-               align: 'justify',
-               lineGap: 2
-           });
-        
-        // Calcular altura de descripción
-        const descripcionHeight = Math.ceil(mantenimiento.descripcion.length / 70) * 12;
-        yPosition += descripcionHeight + 20;
-
-        // ✅ CHECKLIST (si existe)
-        if (mantenimiento.checklist && mantenimiento.checklist.length > 0) {
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('CHECKLIST DE MANTENIMIENTO:', 50, yPosition);
-            
-            yPosition += 20;
-            
-            doc.font('Helvetica')
-               .fontSize(9);
-               
-            mantenimiento.checklist.forEach((item, index) => {
-                const estado = item.completado ? '✅ COMPLETADO' : '❌ PENDIENTE';
-                doc.text(`${index + 1}. ${item.item} - ${estado}`, 60, yPosition);
-                
-                if (item.observaciones) {
-                    yPosition += 12;
-                    doc.text(`   Observaciones: ${item.observaciones}`, 70, yPosition, {
-                        width: 450,
-                        lineGap: 1
-                    });
-                    yPosition += 8;
-                }
-                
-                yPosition += 15;
-            });
-            
-            yPosition += 20;
-        }
-
-        // ✅ FOTOS ANTES DEL MANTENIMIENTO (si existen)
-        const fotosAntes = mantenimiento.fotos?.filter(foto => foto.tipo === 'antes') || [];
-        if (fotosAntes.length > 0) {
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('FOTOS ANTES DEL MANTENIMIENTO', 50, 50, { align: 'center' });
-            
-            let fotoY = 80;
-            
-            fotosAntes.forEach((foto, index) => {
-                if (fotoY > 650) {
-                    doc.addPage();
-                    fotoY = 50;
-                }
-                
-                doc.fontSize(10)
-                   .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, fotoY);
-                
-                fotoY += 15;
-                
-                try {
-                    if (foto.datos_imagen) {
-                        doc.image(foto.datos_imagen, 50, fotoY, { 
-                            width: 400,
-                            height: 300,
-                            fit: [400, 300]
-                        });
-                        fotoY += 320;
-                    } else {
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#ff0000')
-                           .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
-                        fotoY += 20;
-                    }
-                } catch (imageError) {
-                    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
-                }
-            });
-        }
-
-        // ✅ FOTOS DESPUÉS DEL MANTENIMIENTO (si existen)
-        const fotosDespues = mantenimiento.fotos?.filter(foto => foto.tipo === 'despues') || [];
-        if (fotosDespues.length > 0) {
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('FOTOS DESPUÉS DEL MANTENIMIENTO', 50, 50, { align: 'center' });
-            
-            let fotoY = 80;
-            
-            fotosDespues.forEach((foto, index) => {
-                if (fotoY > 650) {
-                    doc.addPage();
-                    fotoY = 50;
-                }
-                
-                doc.fontSize(10)
-                   .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, fotoY);
-                
-                fotoY += 15;
-                
-                try {
-                    if (foto.datos_imagen) {
-                        doc.image(foto.datos_imagen, 50, fotoY, { 
-                            width: 400,
-                            height: 300,
-                            fit: [400, 300]
-                        });
-                        fotoY += 320;
-                    } else {
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#ff0000')
-                           .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
-                        fotoY += 20;
-                    }
-                } catch (imageError) {
-                    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
-                }
-            });
-        }
-
-        // ✅ MATERIALES UTILIZADOS (si existen)
-        if (mantenimiento.materiales && mantenimiento.materiales.length > 0) {
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
-            
-            let materialY = 80;
-            let totalCosto = 0;
-            
-            // Encabezados de tabla
-            doc.font('Helvetica-Bold')
-               .fontSize(10)
-               .text('Material', 50, materialY)
-               .text('Cantidad', 250, materialY)
-               .text('Costo Unitario', 350, materialY)
-               .text('Subtotal', 450, materialY);
-            
-            materialY += 20;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 10;
-
-            // Filas de materiales
-            doc.font('Helvetica')
-               .fontSize(9);
-               
-            mantenimiento.materiales.forEach(material => {
-                const materialNombre = material.material_nombre;
-                const subtotal = material.cantidad * material.costo;
-                totalCosto += subtotal;
-                
-                doc.text(materialNombre, 50, materialY, { width: 180 })
-                   .text(`${material.cantidad} ${material.unidad}`, 250, materialY)
-                   .text(`$${material.costo.toLocaleString('es-CL')}`, 350, materialY)
-                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
-                
-                materialY += 15;
-            });
-
-            // Total
-            materialY += 10;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 20;
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(10)
-               .text('TOTAL:', 350, materialY)
-               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
-        }
-
-        // ✅ RESUMEN ESTADÍSTICO
-        doc.addPage();
+        // Título de sección
         doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
+           .text('INFORMACIÓN GENERAL', 50, yPosition);
         
-        let statsY = 100;
-        doc.fontSize(11)
-           .font('Helvetica')
+        yPosition += 25;
+
+        // Tabla de información
+        const infoLeft = 50;
+        const infoRight = 300;
+        
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .fillColor('#333333')
+           .text('Tipo de Mantenimiento:', infoLeft, yPosition)
+           .text('Estado:', infoRight, yPosition);
+        
+        doc.font('Helvetica')
            .fillColor('#000000')
-           .text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, statsY)
-           .text(`• Total de fotos (después): ${fotosDespues.length}`, 50, statsY + 20)
-           .text(`• Total de materiales utilizados: ${mantenimiento.materiales?.length || 0}`, 50, statsY + 40)
-           .text(`• Items de checklist: ${estadisticas?.total_checklist || 0}`, 50, statsY + 60)
-           .text(`• Checklist completados: ${estadisticas?.checklist_completados || 0}`, 50, statsY + 80);
+           .text(mantenimiento.tipo.toUpperCase(), infoLeft + 120, yPosition)
+           .text(mantenimiento.estado.toUpperCase(), infoRight + 40, yPosition);
+        
+        yPosition += 20;
+        
+        doc.font('Helvetica-Bold')
+           .text('Planta:', infoLeft, yPosition)
+           .text('Técnico:', infoRight, yPosition);
+        
+        doc.font('Helvetica')
+           .text(mantenimiento.plantaNombre, infoLeft + 40, yPosition)
+           .text(mantenimiento.tecnicoNombre, infoRight + 50, yPosition);
+        
+        yPosition += 20;
+        
+        doc.font('Helvetica-Bold')
+           .text('Fecha Programada:', infoLeft, yPosition);
+        
+        doc.font('Helvetica')
+           .text(new Date(mantenimiento.fechaProgramada).toLocaleDateString('es-ES'), infoLeft + 100, yPosition);
+        
+        if (mantenimiento.estado === 'completado' && mantenimiento.fechaRealizada) {
+            yPosition += 20;
+            doc.font('Helvetica-Bold')
+               .text('Fecha de Realización:', infoLeft, yPosition);
+            
+            doc.font('Helvetica')
+               .text(new Date(mantenimiento.fechaRealizada).toLocaleDateString('es-ES'), infoLeft + 110, yPosition);
+        }
+
+        yPosition += 40;
+
+        // ========== DESCRIPCIÓN DEL TRABAJO ==========
+        doc.fontSize(14)
+           .font('Helvetica-Bold')
+           .fillColor('#2c5aa0')
+           .text('DESCRIPCIÓN DEL MANTENIMIENTO', 50, yPosition);
+        
+        yPosition += 25;
+        
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .fillColor('#333333')
+           .text('Tareas Programadas:', 50, yPosition);
+        
+        yPosition += 15;
+        
+        doc.font('Helvetica')
+           .fillColor('#000000')
+           .text(mantenimiento.descripcion, 50, yPosition, { 
+               width: 500, 
+               align: 'justify',
+               lineGap: 3
+           });
+        
+        // Calcular altura de descripción
+        const descripcionHeight = Math.ceil(mantenimiento.descripcion.length / 80) * 12;
+        yPosition += descripcionHeight + 20;
+
+        // ========== RESUMEN DE EJECUCIÓN ==========
+        if (mantenimiento.resumenTrabajo) {
+            doc.fontSize(14)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('RESUMEN DE EJECUCIÓN', 50, yPosition);
+            
+            yPosition += 25;
+            
+            doc.fontSize(10)
+               .font('Helvetica-Bold')
+               .fillColor('#333333')
+               .text('Trabajo Realizado:', 50, yPosition);
+            
+            yPosition += 15;
+            
+            doc.font('Helvetica')
+               .fillColor('#000000')
+               .text(mantenimiento.resumenTrabajo, 50, yPosition, { 
+                   width: 500, 
+                   align: 'justify',
+                   lineGap: 3
+               });
+            
+            const resumenHeight = Math.ceil(mantenimiento.resumenTrabajo.length / 80) * 12;
+            yPosition += resumenHeight + 30;
+        }
+
+        // ========== FOTOS ANTES DEL MANTENIMIENTO ==========
+        const fotosAntes = mantenimiento.fotos?.filter(foto => foto.tipo === 'antes') || [];
+        if (fotosAntes.length > 0) {
+            // Verificar si necesitamos nueva página
+            if (yPosition > 600) {
+                doc.addPage();
+                yPosition = 50;
+            }
+            
+            doc.fontSize(14)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('FOTOS ANTES DEL MANTENIMIENTO', 50, yPosition, { align: 'center' });
+            
+            yPosition += 30;
+            
+            fotosAntes.forEach((foto, index) => {
+                if (yPosition > 650) {
+                    doc.addPage();
+                    yPosition = 50;
+                }
+                
+                doc.fontSize(10)
+                   .font('Helvetica-Bold')
+                   .fillColor('#333333')
+                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPosition);
+                
+                yPosition += 15;
+                
+                try {
+                    if (foto.datos_imagen) {
+                        doc.image(foto.datos_imagen, 50, yPosition, { 
+                            width: 200,
+                            height: 150,
+                            fit: [200, 150],
+                            align: 'center'
+                        });
+                        yPosition += 160;
+                    } else {
+                        doc.fontSize(9)
+                           .font('Helvetica')
+                           .fillColor('#ff0000')
+                           .text(`❌ Imagen no disponible`, 50, yPosition);
+                        yPosition += 20;
+                    }
+                } catch (imageError) {
+                    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
+                    doc.fontSize(9)
+                       .font('Helvetica')
+                       .fillColor('#ff0000')
+                       .text(`❌ Error al cargar imagen`, 50, yPosition);
+                    yPosition += 20;
+                }
+                
+                yPosition += 10; // Espacio entre fotos
+            });
+            
+            yPosition += 20;
+        }
+
+        // ========== FOTOS DESPUÉS DEL MANTENIMIENTO ==========
+        const fotosDespues = mantenimiento.fotos?.filter(foto => foto.tipo === 'despues') || [];
+        if (fotosDespues.length > 0) {
+            // Verificar si necesitamos nueva página
+            if (yPosition > 600) {
+                doc.addPage();
+                yPosition = 50;
+            }
+            
+            doc.fontSize(14)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('FOTOS DESPUÉS DEL MANTENIMIENTO', 50, yPosition, { align: 'center' });
+            
+            yPosition += 30;
+            
+            fotosDespues.forEach((foto, index) => {
+                if (yPosition > 650) {
+                    doc.addPage();
+                    yPosition = 50;
+                }
+                
+                doc.fontSize(10)
+                   .font('Helvetica-Bold')
+                   .fillColor('#333333')
+                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPosition);
+                
+                yPosition += 15;
+                
+                try {
+                    if (foto.datos_imagen) {
+                        doc.image(foto.datos_imagen, 50, yPosition, { 
+                            width: 200,
+                            height: 150,
+                            fit: [200, 150],
+                            align: 'center'
+                        });
+                        yPosition += 160;
+                    } else {
+                        doc.fontSize(9)
+                           .font('Helvetica')
+                           .fillColor('#ff0000')
+                           .text(`❌ Imagen no disponible`, 50, yPosition);
+                        yPosition += 20;
+                    }
+                } catch (imageError) {
+                    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
+                    doc.fontSize(9)
+                       .font('Helvetica')
+                       .fillColor('#ff0000')
+                       .text(`❌ Error al cargar imagen`, 50, yPosition);
+                    yPosition += 20;
+                }
+                
+                yPosition += 10; // Espacio entre fotos
+            });
+            
+            yPosition += 20;
+        }
+
+        // ========== MATERIALES UTILIZADOS ==========
+        if (mantenimiento.materiales && mantenimiento.materiales.length > 0) {
+            // Verificar si necesitamos nueva página
+            if (yPosition > 500) {
+                doc.addPage();
+                yPosition = 50;
+            }
+            
+            doc.fontSize(14)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('MATERIALES UTILIZADOS', 50, yPosition, { align: 'center' });
+            
+            yPosition += 30;
+
+            // Encabezados de tabla
+            doc.font('Helvetica-Bold')
+               .fontSize(9)
+               .fillColor('#333333')
+               .text('MATERIAL', 50, yPosition)
+               .text('CANTIDAD', 200, yPosition)
+               .text('UNIDAD', 270, yPosition)
+               .text('COSTO UNITARIO', 330, yPosition)
+               .text('SUBTOTAL', 430, yPosition);
+            
+            yPosition += 15;
+            
+            // Línea de separación
+            doc.moveTo(50, yPosition).lineTo(545, yPosition).strokeColor('#cccccc').lineWidth(0.5).stroke();
+            yPosition += 10;
+
+            // Filas de materiales
+            doc.font('Helvetica')
+               .fontSize(9)
+               .fillColor('#000000');
+               
+            let totalCosto = 0;
+            
+            mantenimiento.materiales.forEach(material => {
+                if (yPosition > 700) {
+                    doc.addPage();
+                    yPosition = 50;
+                    // Volver a poner encabezados en nueva página
+                    doc.font('Helvetica-Bold')
+                       .fontSize(9)
+                       .text('MATERIAL', 50, yPosition)
+                       .text('CANTIDAD', 200, yPosition)
+                       .text('UNIDAD', 270, yPosition)
+                       .text('COSTO UNITARIO', 330, yPosition)
+                       .text('SUBTOTAL', 430, yPosition);
+                    yPosition += 25;
+                }
+                
+                const subtotal = material.cantidad * material.costo;
+                totalCosto += subtotal;
+                
+                doc.text(material.material_nombre || 'Sin nombre', 50, yPosition, { width: 140 })
+                   .text(material.cantidad.toString(), 200, yPosition)
+                   .text(material.unidad, 270, yPosition)
+                   .text(`$${material.costo.toLocaleString('es-CL')}`, 330, yPosition)
+                   .text(`$${subtotal.toLocaleString('es-CL')}`, 430, yPosition);
+                
+                yPosition += 15;
+            });
+
+            // Línea de total
+            yPosition += 5;
+            doc.moveTo(50, yPosition).lineTo(545, yPosition).strokeColor('#cccccc').lineWidth(0.5).stroke();
+            yPosition += 15;
+            
+            // Total
+            doc.font('Helvetica-Bold')
+               .fontSize(10)
+               .text('TOTAL GENERAL:', 300, yPosition)
+               .text(`$${totalCosto.toLocaleString('es-CL')}`, 430, yPosition);
+            
+            yPosition += 30;
+        }
+
+        // ========== RESUMEN ESTADÍSTICO ==========
+        // Verificar si necesitamos nueva página
+        if (yPosition > 600) {
+            doc.addPage();
+            yPosition = 50;
+        }
+        
+        doc.fontSize(14)
+           .font('Helvetica-Bold')
+           .fillColor('#2c5aa0')
+           .text('RESUMEN ESTADÍSTICO', 50, yPosition, { align: 'center' });
+        
+        yPosition += 30;
+        
+        const statsLeft = 80;
+        doc.fontSize(10)
+           .font('Helvetica')
+           .fillColor('#000000');
+        
+        doc.text('• Fotos antes del mantenimiento:', statsLeft, yPosition)
+           .text(fotosAntes.length.toString(), 300, yPosition);
+        
+        yPosition += 20;
+        doc.text('• Fotos después del mantenimiento:', statsLeft, yPosition)
+           .text(fotosDespues.length.toString(), 300, yPosition);
+        
+        yPosition += 20;
+        doc.text('• Materiales utilizados:', statsLeft, yPosition)
+           .text((mantenimiento.materiales?.length || 0).toString(), 300, yPosition);
         
         if (mantenimiento.materiales && mantenimiento.materiales.length > 0) {
             const costoTotal = mantenimiento.materiales.reduce((total, material) => 
                 total + (material.cantidad * material.costo), 0
             );
-            doc.text(`• Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50, statsY + 100);
+            yPosition += 20;
+            doc.text('• Inversión total en materiales:', statsLeft, yPosition)
+               .text(`$${costoTotal.toLocaleString('es-CL')}`, 300, yPosition);
         }
 
-        // ✅ FIRMA Y FECHA
-        const firmaY = 200;
-        doc.font('Helvetica-Bold')
+        // ========== FIRMA Y FECHA ==========
+        const firmaY = Math.max(yPosition + 50, 650);
+        
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
            .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, firmaY);
         
-        doc.moveTo(50, firmaY + 20).lineTo(250, firmaY + 20).stroke();
+        doc.moveTo(50, firmaY + 15).lineTo(250, firmaY + 15).strokeColor('#000000').lineWidth(1).stroke();
         
         doc.font('Helvetica')
-           .text(`Fecha de generación: ${new Date().toLocaleDateString('es-ES')}`, 350, firmaY + 20);
+           .text(mantenimiento.tecnicoNombre, 50, firmaY + 25);
+        
+        doc.font('Helvetica-Bold')
+           .text('Fecha de generación:', 350, firmaY)
+           .font('Helvetica')
+           .text(new Date().toLocaleDateString('es-ES'), 350, firmaY + 15);
+
+        // ========== PIE DE PÁGINA ==========
+        const pageHeight = doc.page.height;
+        doc.fontSize(8)
+           .font('Helvetica')
+           .fillColor('#666666')
+           .text(`Sistema de Gestión de Mantenimientos - Página ${doc.bufferedPageRange().count}`, 50, pageHeight - 30, { align: 'center' });
 
         // ✅ FINALIZAR DOCUMENTO
         doc.end();
-        console.log('✅ [MANTENIMIENTO PDF] PDF generado exitosamente');
+        console.log('✅ [MANTENIMIENTO PDF] PDF generado exitosamente con estructura mejorada');
 
     } catch (error) {
         console.log('❌ [MANTENIMIENTO PDF] ERROR:', error);
@@ -863,4 +989,3 @@ export const generarReportePDF = async (req, res) => {
         }
     }
 };
-
