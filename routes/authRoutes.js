@@ -1,4 +1,4 @@
-// routes/authRoutes.js - VERSIÓN CORREGIDA Y COMPLETA
+// routes/authRoutes.js - VERSIÓN COMPLETA CON FILTROS DE PLANTAS
 import express from "express";
 import {
     registrar,
@@ -17,8 +17,12 @@ import {
 import { 
   verificarToken, 
   verificarTokenOpcional,
-  verificarRol  // ✅ AGREGAR ESTA IMPORTACIÓN
+  verificarRol
 } from "../middlewares/verificarToken.js";
+import { 
+  filtrarPlantasPorRol,
+  prevenirCreacionPlantas 
+} from "../middlewares/verificarPlantaRol.js";
 
 const router = express.Router();
 
@@ -30,7 +34,6 @@ router.post("/olvide-contraseña", olvideContraseña);
 router.post("/restablecer-contraseña/:token", restablecerContraseña);
 
 // ==================== RUTAS PROTEGIDAS ====================
-// ✅ RUTA CORREGIDA: Usar middleware OPCIONAL para verificar-autenticacion
 router.get("/verificar-autenticacion", verificarTokenOpcional, verificarAutenticacion);
 
 // Perfil de usuario (todos los autenticados)
@@ -40,7 +43,6 @@ router.post("/cambiar-password", verificarToken, cambiarContraseña);
 router.post("/cerrar-sesion", verificarToken, cerrarSesion);
 
 // ==================== RUTAS DE ADMINISTRACIÓN ====================
-// ✅ RUTAS NUEVAS: Gestión de usuarios (solo superadmin/admin)
 router.get('/usuarios', verificarToken, verificarRol(['superadmin', 'admin']), obtenerUsuarios);
 router.put('/usuarios/:usuarioId/rol', verificarToken, verificarRol(['superadmin']), actualizarRolUsuario);
 

@@ -19,40 +19,107 @@ import {
     eliminarMaterial
 } from "../controllers/incidenciaController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
-import { uploadMultiple } from "../middlewares/upload.js"; // ✅ Importar Multer
+import { 
+    filtrarPlantasPorRol 
+} from "../middlewares/verificarPlantaRol.js";
+import { uploadMultiple } from "../middlewares/upload.js";
 
 const router = express.Router();
 
 // Todas las rutas requieren autenticación
 router.use(verificarToken);
 
-router.get("/:id/reporte-pdf", (req, res, next) => {
-    console.log('🎯 [ROUTE DEBUG] Ruta PDF accedida para incidencia:', req.params.id);
-    console.log('🎯 [ROUTE DEBUG] Usuario:', req.usuario?.email);
-    console.log('🎯 [ROUTE DEBUG] Método:', req.method);
-    console.log('🎯 [ROUTE DEBUG] URL completa:', req.originalUrl);
-    next();
-}, generarReportePDF)// ✅ ESTA PRIMERO
-router.get("/:id/completa", obtenerIncidenciaCompleta);
-router.post("/:id/fotos", verificarRol(['admin', 'tecnico']), uploadMultiple, subirFotos);
-router.delete("/:id/fotos/:fotoId", verificarRol(['admin', 'tecnico']), eliminarFoto);
-router.post("/:id/materiales", verificarRol(['admin', 'tecnico']), agregarMateriales);
-router.delete("/:id/materiales/:materialId", verificarRol(['admin', 'tecnico']), eliminarMaterial);
-router.put("/:id/completar", verificarRol(['admin', 'tecnico']), completarIncidencia);
+// ==================== RUTAS ESPECÍFICAS ====================
+router.get("/:id/reporte-pdf", 
+    filtrarPlantasPorRol(), // ✅ Verifica acceso a la incidencia
+    generarReportePDF
+);
 
-// ✅ SEGUNDO: Rutas con parámetros específicos
-router.get("/planta/:plantId", obtenerIncidenciasPlanta);
-router.get("/estado/:estado", obtenerIncidenciasEstado);
+router.get("/:id/completa", 
+    filtrarPlantasPorRol(), // ✅ Verifica acceso
+    obtenerIncidenciaCompleta
+);
 
-// ✅ TERCERO: Rutas GENERALES (más generales después)
-router.get("/:id", obtenerIncidencia); // ✅ ESTA ÚLTIMA
-router.put("/:id", verificarRol(['admin', 'tecnico']), actualizarIncidencia);
-router.patch("/:id/estado", verificarRol(['admin', 'tecnico']), cambiarEstadoIncidencia);
-router.delete("/:id", verificarRol(['admin']), eliminarIncidencia);
+router.post("/:id/fotos", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    uploadMultiple, 
+    subirFotos
+);
 
-// ✅ CUARTO: Rutas sin parámetros
-router.post("/", crearIncidencia);
-router.get("/", obtenerIncidencias);
-router.get("/resumen/dashboard", obtenerIncidenciasResumen);
+router.delete("/:id/fotos/:fotoId", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    eliminarFoto
+);
+
+router.post("/:id/materiales", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    agregarMateriales
+);
+
+router.delete("/:id/materiales/:materialId", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    eliminarMaterial
+);
+
+router.put("/:id/completar", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    completarIncidencia
+);
+
+// ==================== RUTAS CON PARÁMETROS ====================
+router.get("/planta/:plantId", 
+    filtrarPlantasPorRol(), // ✅ Filtra por plantas del usuario
+    obtenerIncidenciasPlanta
+);
+
+router.get("/estado/:estado", 
+    filtrarPlantasPorRol(), // ✅ Filtra por plantas del usuario
+    obtenerIncidenciasEstado
+);
+
+// ==================== RUTAS GENERALES ====================
+router.get("/:id", 
+    filtrarPlantasPorRol(), // ✅ Verifica acceso
+    obtenerIncidencia
+);
+
+router.put("/:id", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    actualizarIncidencia
+);
+
+router.patch("/:id/estado", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    cambiarEstadoIncidencia
+);
+
+router.delete("/:id", 
+    verificarRol(['admin']), 
+    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    eliminarIncidencia
+);
+
+// ==================== RUTAS SIN PARÁMETROS ====================
+router.post("/", 
+    filtrarPlantasPorRol(), // ✅ Para validar la plantaId del body
+    crearIncidencia
+);
+
+router.get("/", 
+    filtrarPlantasPorRol(), // ✅ Filtra incidencias por plantas del usuario
+    obtenerIncidencias
+);
+
+router.get("/resumen/dashboard", 
+    filtrarPlantasPorRol(), // ✅ Filtra resumen por plantas del usuario
+    obtenerIncidenciasResumen
+);
 
 export default router;

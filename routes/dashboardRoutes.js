@@ -7,20 +7,39 @@ import {
   obtenerEstadoCache
 } from "../controllers/dashboardController.js";
 import { verificarToken } from "../middlewares/verificarToken.js";
+import { 
+  filtrarPlantasPorRol 
+} from "../middlewares/verificarPlantaRol.js";
 
 const router = express.Router();
 
 router.use(verificarToken);
 
-// ✅ RUTAS EXISTENTES (mantener compatibilidad)
-router.get("/metricas", obtenerMetricas);
+// ==================== RUTAS DEL DASHBOARD ====================
+router.get("/metricas", 
+  filtrarPlantasPorRol(), // ✅ Filtra métricas por plantas del usuario
+  obtenerMetricas
+);
 
-// ✅ RUTAS NUEVAS OPTIMIZADAS
-router.get("/plantas", obtenerPlantasDashboard);
-router.get("/completo", obtenerDashboardCompleto);
+router.get("/plantas", 
+  filtrarPlantasPorRol(), // ✅ Filtra plantas por rol del usuario
+  obtenerPlantasDashboard
+);
 
-// ✅ RUTAS ADMIN/DEBUG (opcionales)
-router.delete("/cache", invalidarCacheDashboard);
-router.get("/cache/estado", obtenerEstadoCache);
+router.get("/completo", 
+  filtrarPlantasPorRol(), // ✅ Filtra datos completos por plantas del usuario
+  obtenerDashboardCompleto
+);
+
+// ==================== RUTAS ADMIN/DEBUG ====================
+router.delete("/cache", 
+  filtrarPlantasPorRol(), // ✅ Solo afecta cache de sus plantas
+  invalidarCacheDashboard
+);
+
+router.get("/cache/estado", 
+  filtrarPlantasPorRol(), // ✅ Solo ve estado de cache de sus plantas
+  obtenerEstadoCache
+);
 
 export default router;

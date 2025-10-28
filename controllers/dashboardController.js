@@ -36,10 +36,13 @@ const clearDashboardCache = () => {
 
 export const obtenerMetricas = async (req, res) => {
   try {
-    console.log('📊 [DASHBOARD] Obteniendo métricas');
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
     
-    // ✅ PRIMERO VERIFICAR CACHE
-    const cachedMetrics = getDashboardCache('metricas');
+    console.log('📊 [DASHBOARD] Obteniendo métricas - Filtros:', filtrosPlanta);
+    
+    // ✅ CACHE POR USUARIO (cada usuario ve métricas diferentes)
+    const cacheKey = `metricas:${req.usuarioId}`;
+    const cachedMetrics = getDashboardCache(cacheKey);
     if (cachedMetrics) {
       return res.status(200).json({
         success: true,
@@ -51,17 +54,18 @@ export const obtenerMetricas = async (req, res) => {
 
     console.log('🔄 [DASHBOARD] Consultando base de datos para métricas...');
     
-    // ✅ CONSULTA OPTIMIZADA - UNA SOLA LLAMADA
-    const metricas = await Planta.obtenerMetricasConsolidadas();
+    // ✅ CORREGIDO: Pasar filtros al modelo
+    const metricas = await Planta.obtenerMetricasConsolidadas(filtrosPlanta);
 
-    // ✅ GUARDAR EN CACHE
-    updateDashboardCache('metricas', metricas);
+    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
+    updateDashboardCache(cacheKey, metricas);
 
     res.status(200).json({
       success: true,
       metricas,
       fromCache: false,
-      message: "Métricas obtenidas correctamente"
+      message: "Métricas obtenidas correctamente",
+      filtrosAplicados: filtrosPlanta // Para debug
     });
   } catch (error) {
     console.error("❌ [DASHBOARD] Error al obtener métricas:", error);
@@ -74,10 +78,13 @@ export const obtenerMetricas = async (req, res) => {
 
 export const obtenerPlantasDashboard = async (req, res) => {
   try {
-    console.log('🏭 [DASHBOARD] Obteniendo plantas para dashboard');
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
     
-    // ✅ PRIMERO VERIFICAR CACHE
-    const cachedPlantas = getDashboardCache('plantas');
+    console.log('🏭 [DASHBOARD] Obteniendo plantas para dashboard - Filtros:', filtrosPlanta);
+    
+    // ✅ CACHE POR USUARIO
+    const cacheKey = `plantas:${req.usuarioId}`;
+    const cachedPlantas = getDashboardCache(cacheKey);
     if (cachedPlantas) {
       return res.status(200).json({
         success: true,
@@ -89,17 +96,18 @@ export const obtenerPlantasDashboard = async (req, res) => {
 
     console.log('🔄 [DASHBOARD] Consultando base de datos para plantas...');
     
-    // ✅ DATOS CONSOLIDADOS EN UNA CONSULTA
-    const plantas = await Planta.obtenerPlantasConEstados();
+    // ✅ CORREGIDO: Pasar filtros al modelo
+    const plantas = await Planta.obtenerPlantasConEstados(filtrosPlanta);
 
-    // ✅ GUARDAR EN CACHE
-    updateDashboardCache('plantas', plantas);
+    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
+    updateDashboardCache(cacheKey, plantas);
 
     res.status(200).json({
       success: true,
       plantas,
       fromCache: false,
-      message: "Plantas obtenidas correctamente"
+      message: "Plantas obtenidas correctamente",
+      filtrosAplicados: filtrosPlanta // Para debug
     });
   } catch (error) {
     console.error("❌ [DASHBOARD] Error al obtener plantas:", error);
@@ -112,9 +120,11 @@ export const obtenerPlantasDashboard = async (req, res) => {
 
 export const obtenerDashboardCompleto = async (req, res) => {
   try {
-    console.log('🎯 [DASHBOARD] Obteniendo dashboard completo');
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
     
-    // ✅ CACHE PARA DASHBOARD COMPLETO
+    console.log('🎯 [DASHBOARD] Obteniendo dashboard completo - Filtros:', filtrosPlanta);
+    
+    // ✅ CACHE POR USUARIO
     const cacheKey = `completo:${req.usuarioId}`;
     const cachedDashboard = getDashboardCache(cacheKey);
     if (cachedDashboard) {
@@ -128,12 +138,12 @@ export const obtenerDashboardCompleto = async (req, res) => {
 
     console.log('🔄 [DASHBOARD] Consultando base de datos para dashboard completo...');
     
-    // ✅ LLAMADAS PARALELAS OPTIMIZADAS
+    // ✅ CORREGIDO: Pasar filtros a TODOS los modelos
     const [metricas, plantas, incidenciasRecientes, mantenimientosPendientes] = await Promise.all([
-      Planta.obtenerMetricasConsolidadas(),
-      Planta.obtenerPlantasConEstados(),
-      Incidencia.obtenerRecientes(10), // Últimas 10 incidencias
-      Mantenimiento.obtenerPendientesProximos(10) // Mantenimientos próximos
+      Planta.obtenerMetricasConsolidadas(filtrosPlanta),
+      Planta.obtenerPlantasConEstados(filtrosPlanta),
+      Incidencia.obtenerRecientes(10, filtrosPlanta), // ✅ Pasar filtros
+      Mantenimiento.obtenerPendientesProximos(10, filtrosPlanta) // ✅ Pasar filtros
     ]);
 
     const dashboardData = {
@@ -141,10 +151,11 @@ export const obtenerDashboardCompleto = async (req, res) => {
       plantas,
       incidenciasRecientes,
       mantenimientosPendientes,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      filtrosAplicados: filtrosPlanta // Para debug
     };
 
-    // ✅ GUARDAR EN CACHE
+    // ✅ GUARDAR EN CACHE CON CLAVE DE USUARIO
     updateDashboardCache(cacheKey, dashboardData);
 
     res.status(200).json({
@@ -163,14 +174,29 @@ export const obtenerDashboardCompleto = async (req, res) => {
 };
 
 // ✅ INVALIDAR CACHE CUANDO HAY CAMBIOS
+// ✅ INVALIDAR CACHE CUANDO HAY CAMBIOS
 export const invalidarCacheDashboard = async (req, res) => {
   try {
-    clearDashboardCache();
-    console.log('🔄 [DASHBOARD] Cache invalidado manualmente');
+    const { usuarioId } = req.query; // Opcional: invalidar cache de usuario específico
+    
+    if (usuarioId) {
+      // Invalidar solo cache de un usuario
+      const keys = ['metricas', 'plantas', 'completo'].map(key => `${key}:${usuarioId}`);
+      keys.forEach(key => {
+        dashboardCache[key] = null;
+      });
+      console.log(`🔄 [DASHBOARD] Cache invalidado para usuario: ${usuarioId}`);
+    } else {
+      // Invalidar todo el cache
+      clearDashboardCache();
+      console.log('🔄 [DASHBOARD] Cache global invalidado manualmente');
+    }
     
     res.status(200).json({
       success: true,
-      message: "Cache del dashboard invalidado correctamente"
+      message: usuarioId 
+        ? `Cache del dashboard invalidado para usuario ${usuarioId}`
+        : "Cache del dashboard invalidado correctamente"
     });
   } catch (error) {
     console.error("❌ [DASHBOARD] Error al invalidar cache:", error);

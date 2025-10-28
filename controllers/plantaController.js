@@ -35,6 +35,17 @@ export const crearPlanta = async (req, res) => {
 export const obtenerPlanta = async (req, res) => {
     try {
         const { id } = req.params;
+        
+        // ✅ VERIFICAR ACCESO: Usar el método que verifica usuario_plantas
+        const tieneAcceso = await Usuario.tieneAccesoAPlanta(req.usuarioId, id);
+        
+        if (!tieneAcceso && req.usuario.rol !== 'superadmin') {
+            return res.status(403).json({
+                success: false,
+                message: "No tienes acceso a esta planta"
+            });
+        }
+
         const planta = await Planta.buscarPorId(id);
 
         if (!planta) {
@@ -65,6 +76,7 @@ export const obtenerPlantas = async (req, res) => {
         console.log('🔍 [CONTROLLER] Filtros aplicados:', filtrosPlanta);
         console.log('👤 [CONTROLLER] Usuario:', req.usuario?.email, 'Rol:', req.usuario?.rol);
         
+        // ✅ CORREGIDO: Pasar los filtros al modelo
         const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
 
         res.status(200).json({
@@ -90,7 +102,14 @@ export const obtenerPlantasCliente = async (req, res) => {
     
     console.log('🔍 [CONTROLLER] Obteniendo plantas para cliente:', clienteId);
     
-    // ✅ USAR EL MÉTODO CORRECTO que consulta usuario_plantas
+    // ✅ VERIFICAR: Si el usuario actual es el cliente o tiene permisos
+    if (req.usuario.rol === 'cliente' && req.usuarioId !== parseInt(clienteId)) {
+        return res.status(403).json({
+            success: false,
+            message: "Solo puedes ver tus propias plantas"
+        });
+    }
+    
     const plantas = await Planta.obtenerPorCliente(clienteId);
     
     console.log('📊 [CONTROLLER] Plantas encontradas:', plantas.length);
@@ -114,6 +133,16 @@ export const actualizarPlanta = async (req, res) => {
         const { id } = req.params;
         const datosActualizados = req.body;
 
+        // ✅ VERIFICAR ACCESO ANTES de actualizar
+        const tieneAcceso = await Usuario.tieneAccesoAPlanta(req.usuarioId, id);
+        
+        if (!tieneAcceso && req.usuario.rol !== 'superadmin') {
+            return res.status(403).json({
+                success: false,
+                message: "No tienes permisos para actualizar esta planta"
+            });
+        }
+
         const plantaActualizada = await Planta.actualizar(id, datosActualizados);
 
         res.status(200).json({
@@ -128,13 +157,23 @@ export const actualizarPlanta = async (req, res) => {
             message: error.message
         });
     }
-};
+}
 
 export const eliminarPlanta = async (req, res) => {
     try {
         const { id } = req.params;
 
         console.log('🗑️ Intentando eliminar planta ID:', id);
+
+        // ✅ VERIFICAR ACCESO ANTES de eliminar
+        const tieneAcceso = await Usuario.tieneAccesoAPlanta(req.usuarioId, id);
+        
+        if (!tieneAcceso && req.usuario.rol !== 'superadmin') {
+            return res.status(403).json({
+                success: false,
+                message: "No tienes permisos para eliminar esta planta"
+            });
+        }
 
         const eliminado = await Planta.eliminar(id);
 
@@ -288,9 +327,11 @@ export const asignarPlantaUsuario = async (req, res) => {
 };
 
 // ✅ Obtener plantas por usuario
+// ✅ Obtener plantas por usuario - ACTUALIZADO
 export const obtenerPlantasUsuario = async (req, res) => {
   try {
     const { usuarioId } = req.params;
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
 
     console.log('🔍 [PLANTA CONTROLLER] Obteniendo plantas para usuario:', usuarioId);
 
@@ -305,7 +346,8 @@ export const obtenerPlantasUsuario = async (req, res) => {
     let plantas;
 
     if (usuario.rol === 'tecnico') {
-      plantas = await Planta.obtenerPorTecnico(usuarioId);
+      // ✅ CORREGIDO: Pasar filtros al modelo
+      plantas = await Planta.obtenerPorTecnico(usuarioId, filtrosPlanta);
     } else if (usuario.rol === 'cliente') {
       plantas = await Planta.obtenerPorCliente(usuarioId);
     } else {
@@ -328,37 +370,46 @@ export const obtenerPlantasUsuario = async (req, res) => {
     });
   }
 };
-
 // ✅ Obtener planta completa con técnicos y clientes
-export const obtenerPlantaCompleta = async (req, res) => {
+// ✅ Obtener todas las plantas con relaciones completas - ACTUALIZADO
+export const obtenerPlantasCompleta = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { limite = 50, pagina = 1 } = req.query;
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
 
-    console.log('🔍 [PLANTA CONTROLLER] Obteniendo planta completa:', id);
+    console.log('🔍 [PLANTA CONTROLLER] Obteniendo todas las plantas completas');
 
-    const plantaCompleta = await Planta.obtenerPlantasCompletas(id);
+    // ✅ CORREGIDO: Pasar filtros al modelo
+    const plantas = await Planta.obtenerTodas(limite, pagina, filtrosPlanta);
 
-    if (!plantaCompleta) {
-      return res.status(404).json({
-        success: false,
-        message: "Planta no encontrada"
-      });
-    }
+    const plantasCompletas = await Promise.all(
+      plantas.map(async (planta) => {
+        try {
+          return await Planta.obtenerPlantasCompletas(planta.id);
+        } catch (error) {
+          console.error(`Error obteniendo planta completa ${planta.id}:`, error);
+          return planta;
+        }
+      })
+    );
 
     res.status(200).json({
       success: true,
-      planta: plantaCompleta
+      plantas: plantasCompletas,
+      paginacion: {
+        limite: parseInt(limite),
+        pagina: parseInt(pagina)
+      }
     });
 
   } catch (error) {
-    console.log("❌ [PLANTA CONTROLLER] Error obteniendo planta completa:", error);
+    console.log("❌ [PLANTA CONTROLLER] Error obteniendo plantas completas:", error);
     res.status(500).json({
       success: false,
       message: error.message
     });
   }
 };
-
 // ✅ Asignar múltiples técnicos a una planta
 export const asignarMultiplesTecnicos = async (req, res) => {
   try {
@@ -475,10 +526,17 @@ export const obtenerPlantasCompletas = async (req, res) => {
 
 export const obtenerPlantasDashboard = async (req, res) => {
   try {
-    const plantas = await Planta.obtenerPlantasConEstados();
-    res.json({ success: true, plantas });
+    const { filtrosPlanta = {} } = req;
+    
+    // ✅ CORREGIDO: Pasar filtros al método del dashboard
+    const plantas = await Planta.obtenerPlantasConEstados(filtrosPlanta);
+    
+    res.json({ 
+        success: true, 
+        plantas,
+        filtrosAplicados: filtrosPlanta // Para debug
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
-

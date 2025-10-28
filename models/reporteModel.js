@@ -54,7 +54,7 @@ static async crear(datosReporte) {
 
 
     // Buscar reporte por ID
-static async buscarPorId(id) {
+static async buscarPorId(id, filtros = {}) {
     try {
         const [reportes] = await pool.execute(
             `SELECT r.*, 
@@ -72,47 +72,56 @@ static async buscarPorId(id) {
             return null;
         }
 
-        // ✅ DEBUG: Ver todos los campos que vienen de la BD
-        console.log('🔍 Reporte COMPLETO desde BD:', reportes[0]);
-        console.log('🔍 Campos específicos:', {
-            id: reportes[0].id,
-            tipo: reportes[0].tipo,
-            periodo: reportes[0].periodo,
-            usuarioNombre: reportes[0].usuarioNombre,
-            plantaNombre: reportes[0].plantaNombre
-        });
+        const reporte = new Reporte(reportes[0]);
+        
+        // ✅ NUEVO: Verificar acceso al reporte
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            if (!filtros.plantaIds.includes(reporte.plantId)) {
+                console.log('🚫 [REPORTE MODEL] Usuario sin acceso a este reporte');
+                return null; // O podrías lanzar un error
+            }
+        }
 
-        return new Reporte(reportes[0]);
+        console.log('✅ [REPORTE MODEL] Reporte encontrado con acceso verificado');
+        return reporte;
     } catch (error) {
         throw new Error(`Error al buscar reporte por ID: ${error.message}`);
     }
 }
 
   // En reporteModel.js - MÉTODO CORREGIDO
-static async obtenerTodos(limite = 10, pagina = 1) {
+static async obtenerTodos(limite = 10, pagina = 1, filtros = {}) {
     try {
-        console.log('🔍 [REPORTE MODEL] Parámetros recibidos:', { limite, pagina });
+        console.log('🔍 [REPORTE MODEL] Parámetros recibidos:', { limite, pagina, filtros });
         
-        // ✅ CORRECCIÓN: Asegurar que sean números
         const limitNum = Number(limite) || 10;
         const paginaNum = Number(pagina) || 1;
         const offsetNum = (paginaNum - 1) * limitNum;
 
-        console.log('🔢 [REPORTE MODEL] Parámetros procesados:', { limitNum, offsetNum });
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE r.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
 
-        // ✅ CORRECCIÓN: Usar template literal para evitar problemas de parámetros
         const query = `
             SELECT r.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
             FROM reportes r 
             LEFT JOIN users u ON r.generadoPor = u.id 
             LEFT JOIN plants p ON r.plantId = p.id 
+            ${whereClause}
             ORDER BY r.fecha DESC 
             LIMIT ${limitNum} OFFSET ${offsetNum}
         `;
 
-        console.log('📝 [REPORTE MODEL] Query ejecutada:', query);
+        console.log('📝 [REPORTE MODEL] Query con filtros:', query);
+        console.log('🔍 [REPORTE MODEL] Parámetros:', parametros);
 
-        const [reportes] = await pool.execute(query);
+        const [reportes] = await pool.execute(query, parametros);
 
         console.log('✅ [REPORTE MODEL] Reportes encontrados:', reportes.length);
 
@@ -124,42 +133,68 @@ static async obtenerTodos(limite = 10, pagina = 1) {
 }
 
     // Obtener reportes por planta
-    static async obtenerPorPlanta(plantId) {
-        try {
-            const [reportes] = await pool.execute(
-                `SELECT r.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
-                 FROM reportes r 
-                 LEFT JOIN users u ON r.generadoPor = u.id 
-                 LEFT JOIN plants p ON r.plantId = p.id 
-                 WHERE r.plantId = ? 
-                 ORDER BY r.fecha DESC`,
-                [plantId]
-            );
-
-            return reportes.map(reporte => new Reporte(reporte));
-        } catch (error) {
-            throw new Error(`Error al obtener reportes por planta: ${error.message}`);
+static async obtenerPorPlanta(plantId, filtros = {}) {
+    try {
+        // ✅ NUEVO: Verificar que la planta esté en los filtros del usuario
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            if (!filtros.plantaIds.includes(parseInt(plantId))) {
+                // El usuario no tiene acceso a esta planta
+                console.log('🚫 [REPORTE MODEL] Usuario sin acceso a planta:', plantId);
+                return [];
+            }
         }
+        
+        const [reportes] = await pool.execute(
+            `SELECT r.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
+             FROM reportes r 
+             LEFT JOIN users u ON r.generadoPor = u.id 
+             LEFT JOIN plants p ON r.plantId = p.id 
+             WHERE r.plantId = ? 
+             ORDER BY r.fecha DESC`,
+            [plantId]
+        );
+
+        console.log('✅ [REPORTE MODEL] Reportes por planta encontrados:', reportes.length);
+        
+        return reportes.map(reporte => new Reporte(reporte));
+    } catch (error) {
+        throw new Error(`Error al obtener reportes por planta: ${error.message}`);
     }
+}
 
     // Obtener reportes por usuario
-    static async obtenerPorUsuario(usuarioId) {
-        try {
-            const [reportes] = await pool.execute(
-                `SELECT r.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
-                 FROM reportes r 
-                 LEFT JOIN users u ON r.generadoPor = u.id 
-                 LEFT JOIN plants p ON r.plantId = p.id 
-                 WHERE r.generadoPor = ? 
-                 ORDER BY r.fecha DESC`,
-                [usuarioId]
-            );
-
-            return reportes.map(reporte => new Reporte(reporte));
-        } catch (error) {
-            throw new Error(`Error al obtener reportes por usuario: ${error.message}`);
+static async obtenerPorUsuario(usuarioId, filtros = {}) {
+    try {
+        let whereClause = 'WHERE r.generadoPor = ?';
+        const parametros = [usuarioId];
+        
+        // ✅ NUEVO: Filtrar por plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND r.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
         }
+        
+        const query = `
+            SELECT r.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
+            FROM reportes r 
+            LEFT JOIN users u ON r.generadoPor = u.id 
+            LEFT JOIN plants p ON r.plantId = p.id 
+            ${whereClause}
+            ORDER BY r.fecha DESC
+        `;
+        
+        console.log('🔍 [REPORTE MODEL] Query obtenerPorUsuario:', { query, parametros });
+        
+        const [reportes] = await pool.execute(query, parametros);
+
+        console.log('✅ [REPORTE MODEL] Reportes por usuario encontrados:', reportes.length);
+        
+        return reportes.map(reporte => new Reporte(reporte));
+    } catch (error) {
+        throw new Error(`Error al obtener reportes por usuario: ${error.message}`);
     }
+}
 
     // Eliminar reporte
     static async eliminar(id) {
@@ -176,8 +211,15 @@ static async obtenerTodos(limite = 10, pagina = 1) {
     }
 
 
-static async obtenerDatosCompletosReporte(plantId, periodo = 'mensual') {
+static async obtenerDatosCompletosReporte(plantId, periodo = 'mensual', filtros = {}) {
     try {
+        // ✅ NUEVO: Verificar acceso a la planta
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            if (!filtros.plantaIds.includes(parseInt(plantId))) {
+                throw new Error('No tienes acceso a los datos de esta planta');
+            }
+        }
+
         // Calcular fechas según el período
         const fechaFin = new Date();
         const fechaInicio = new Date();
@@ -201,6 +243,10 @@ static async obtenerDatosCompletosReporte(plantId, periodo = 'mensual') {
             'SELECT * FROM plants WHERE id = ?', 
             [plantId]
         );
+
+        if (plantas.length === 0) {
+            throw new Error('Planta no encontrada');
+        }
 
         // Obtener datos técnicos del período
         const [datosTecnicos] = await pool.execute(
@@ -235,6 +281,8 @@ static async obtenerDatosCompletosReporte(plantId, periodo = 'mensual') {
             [plantId, fechaInicio, fechaFin]
         );
 
+        console.log('✅ [REPORTE MODEL] Datos completos obtenidos para planta:', plantId);
+        
         return {
             planta: plantas[0],
             metricas: datosTecnicos[0],
@@ -247,6 +295,7 @@ static async obtenerDatosCompletosReporte(plantId, periodo = 'mensual') {
             }
         };
     } catch (error) {
+        console.error('❌ [REPORTE MODEL] Error en obtenerDatosCompletosReporte:', error);
         throw new Error(`Error al obtener datos del reporte: ${error.message}`);
     }
 }

@@ -53,53 +53,70 @@ export class Planta {
     }
 
     // Obtener todas las plantas
-    static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
-        try {
-            const limiteNum = Number(limite);
-            const paginaNum = Number(pagina);
-            
-            if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
-                throw new Error('Parámetros de paginación inválidos');
-            }
-            
-            const offset = (paginaNum - 1) * limiteNum;
-            
-            let whereClause = 'WHERE 1=1';
-            
-            if (filtros.tecnicoId) {
-                whereClause += ` AND p.tecnicoId = ${filtros.tecnicoId}`;
-            }
-            
-            if (filtros.clienteId) {
-                whereClause += ` AND p.clienteId = ${filtros.clienteId}`;
-            }
-            
-            console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause });
-            
-            const query = `
-                SELECT p.*, 
-                       u.nombre as clienteNombre,
-                       ut.nombre as tecnicoNombre
-                FROM plants p 
-                LEFT JOIN users u ON p.clienteId = u.id 
-                LEFT JOIN users ut ON p.tecnicoId = ut.id
-                ${whereClause}
-                ORDER BY p.nombre 
-                LIMIT ${limiteNum} OFFSET ${offset}
-            `;
-            
-            console.log('🔍 [PLANTA MODEL] Query final:', query);
-            
-            const [plantas] = await pool.execute(query);
-            
-            console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
-            return plantas.map(planta => new Planta(planta));
-            
-        } catch (error) {
-            console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
-            throw new Error(`Error al obtener plantas: ${error.message}`);
+static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
+    try {
+        const limiteNum = Number(limite);
+        const paginaNum = Number(pagina);
+        
+        if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
+            throw new Error('Parámetros de paginación inválidos');
         }
+        
+        const offset = (paginaNum - 1) * limiteNum;
+        
+        let whereClause = 'WHERE 1=1';
+        const valores = []; // ✅ NUEVO: Array para valores parametrizados
+        
+        // ✅ CORREGIDO: Usar filtros.plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            // Crear placeholders para el IN clause
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND p.id IN (${placeholders})`;
+            valores.push(...filtros.plantaIds);
+            console.log('🔍 [PLANTA MODEL] Filtro por plantaIds:', filtros.plantaIds);
+        }
+        
+        // ✅ MANTENER filtros existentes pero parametrizados
+        if (filtros.tecnicoId) {
+            whereClause += ` AND p.tecnicoId = ?`;
+            valores.push(filtros.tecnicoId);
+        }
+        
+        if (filtros.clienteId) {
+            whereClause += ` AND p.clienteId = ?`;
+            valores.push(filtros.clienteId);
+        }
+        
+        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
+        
+        const query = `
+            SELECT p.*, 
+                   u.nombre as clienteNombre,
+                   ut.nombre as tecnicoNombre
+            FROM plants p 
+            LEFT JOIN users u ON p.clienteId = u.id 
+            LEFT JOIN users ut ON p.tecnicoId = ut.id
+            ${whereClause}
+            ORDER BY p.nombre 
+            LIMIT ? OFFSET ?
+        `;
+        
+        // ✅ AGREGAR límite y offset a los valores
+        valores.push(limiteNum, offset);
+        
+        console.log('🔍 [PLANTA MODEL] Query final:', query);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        
+        const [plantas] = await pool.execute(query, valores);
+        
+        console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
+        return plantas.map(planta => new Planta(planta));
+        
+    } catch (error) {
+        console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
+        throw new Error(`Error al obtener plantas: ${error.message}`);
     }
+}
 
     // ✅ CORREGIDO: Obtener plantas por cliente (busca en usuario_plantas)
     static async obtenerPorCliente(clienteId) {
@@ -200,22 +217,23 @@ export class Planta {
         }
     }
 
-    static async obtenerPorTecnico(tecnicoId) {
-        try {
-            const [plantas] = await pool.execute(
-                `SELECT p.*, u.nombre as clienteNombre 
-                 FROM plants p 
-                 LEFT JOIN users u ON p.clienteId = u.id 
-                 WHERE p.tecnicoId = ? 
-                 ORDER BY p.nombre`,
-                [tecnicoId]
-            );
+static async obtenerPorTecnico(tecnicoId) {
+    try {
+        const [plantas] = await pool.execute(
+            `SELECT p.*, u.nombre as clienteNombre 
+             FROM plants p 
+             INNER JOIN usuario_plantas up ON p.id = up.planta_id
+             LEFT JOIN users u ON p.clienteId = u.id 
+             WHERE up.usuario_id = ? AND up.tipo_usuario = 'tecnico'
+             ORDER BY p.nombre`,
+            [tecnicoId]
+        );
 
-            return plantas.map(planta => new Planta(planta));
-        } catch (error) {
-            throw new Error(`Error obteniendo plantas del técnico: ${error.message}`);
-        }
+        return plantas.map(planta => new Planta(planta));
+    } catch (error) {
+        throw new Error(`Error obteniendo plantas del técnico: ${error.message}`);
     }
+}
 
     // ✅ MÉTODOS MUCHOS-A-MUCHOS PARA TÉCNICOS
     static async asignarTecnicos(plantaId, tecnicosIds) {
@@ -321,9 +339,19 @@ export class Planta {
 
 
 
-static async obtenerMetricasConsolidadas() {
+static async obtenerMetricasConsolidadas(filtros = {}) {
     try {
-        console.log('📊 [PLANTA MODEL] Obteniendo métricas para gráfico');
+        console.log('📊 [PLANTA MODEL] Obteniendo métricas - Filtros:', filtros);
+        
+        let whereClause = 'WHERE 1=1';
+        const valores = [];
+        
+        // ✅ AGREGAR FILTRO por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND p.id IN (${placeholders})`;
+            valores.push(...filtros.plantaIds);
+        }
         
         const [metricas] = await pool.execute(`
             SELECT 
@@ -331,26 +359,26 @@ static async obtenerMetricasConsolidadas() {
                 SUM(CASE WHEN incidencias_pendientes > 0 THEN 1 ELSE 0 END) as plantasConIncidencias,
                 SUM(CASE WHEN mantenimientos_pendientes > 0 THEN 1 ELSE 0 END) as plantasConMantenimiento,
                 SUM(CASE WHEN incidencias_pendientes = 0 THEN 1 ELSE 0 END) as plantasOperativas,
-                (SELECT COUNT(*) FROM incidencias WHERE estado = 'pendiente') as incidenciasPendientes,
-                (SELECT COUNT(*) FROM incidencias WHERE estado = 'en_progreso') as incidenciasEnProgreso,
-                (SELECT COUNT(*) FROM incidencias WHERE estado = 'resuelto') as incidenciasResueltas,
-                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'pendiente') as mantenimientosPendientes,
-                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'en_progreso') as mantenimientosEnProgreso,
-                (SELECT COUNT(*) FROM mantenimientos WHERE estado = 'completado') as mantenimientosCompletados
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'pendiente') as incidenciasPendientes,
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'en_progreso') as incidenciasEnProgreso,
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'resuelto') as incidenciasResueltas,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'pendiente') as mantenimientosPendientes,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'en_progreso') as mantenimientosEnProgreso,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'completado') as mantenimientosCompletados
             FROM (
                 SELECT 
                     p.id,
                     (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidencias_pendientes,
                     (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientos_pendientes
                 FROM plants p
+                ${whereClause}
             ) as plantas_metrics
-        `);
+        `, valores);
 
         const resultado = metricas[0];
         
-        console.log('✅ [PLANTA MODEL] Métricas obtenidas (CRUDAS):', resultado);
+        console.log('✅ [PLANTA MODEL] Métricas obtenidas:', resultado);
         
-        // ✅ CORRECCIÓN CRÍTICA: Convertir a números
         return {
             totalPlantas: Number(resultado.totalPlantas) || 0,
             plantasConIncidencias: Number(resultado.plantasConIncidencias) || 0,
@@ -374,11 +402,21 @@ static async obtenerMetricasConsolidadas() {
     }
 }
 
-static async obtenerPlantasConEstados() {
+static async obtenerPlantasConEstados(filtros = {}) {
     try {
-        console.log('🏭 [PLANTA MODEL] Obteniendo plantas con estados');
+        console.log('🏭 [PLANTA MODEL] Obteniendo plantas con estados - Filtros:', filtros);
         
-        const [plantas] = await pool.execute(`
+        let whereClause = 'WHERE 1=1';
+        const valores = [];
+        
+        // ✅ AGREGAR FILTRO por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND p.id IN (${placeholders})`;
+            valores.push(...filtros.plantaIds);
+        }
+        
+        const query = `
             SELECT 
                 p.id,
                 p.nombre,
@@ -405,49 +443,44 @@ static async obtenerPlantasConEstados() {
             LEFT JOIN users ut ON p.tecnicoId = ut.id
             LEFT JOIN incidencias i ON p.id = i.plantId
             LEFT JOIN mantenimientos m ON p.id = m.plantId AND m.estado = 'pendiente'
+            ${whereClause}
             GROUP BY p.id, p.nombre, p.ubicacion, p.clienteId, p.tecnicoId, u.nombre, ut.nombre
             ORDER BY p.nombre
-        `);
+        `;
 
+        console.log('🔍 [PLANTA MODEL] Query plantas con estados:', query);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        
+        const [plantas] = await pool.execute(query, valores);
+        
         console.log('✅ [PLANTA MODEL] Plantas con estados obtenidas:', plantas.length);
         
-        // ✅ DEBUG: Ver datos crudos
-        plantas.forEach(planta => {
-            console.log(`🔍 PLANTA ${planta.nombre}:`, {
-                total: planta.totalIncidencias,
-                resueltas: planta.incidenciasResueltas,
-                pendientes: planta.incidenciasPendientes,
-                enProgreso: planta.incidenciasEnProgreso,
-                estado: planta.estado
-            });
-        });
-        
-                return plantas.map(planta => {
-                    const totalIncidencias = Number(planta.totalIncidencias) || 0;
-                    const incidenciasResueltas = Number(planta.incidenciasResueltas) || 0;
-                    
-                    const tasaResolucion = totalIncidencias > 0 
-                        ? Math.round((incidenciasResueltas / totalIncidencias) * 100)
-                        : 100;
+        return plantas.map(planta => {
+            const totalIncidencias = Number(planta.totalIncidencias) || 0;
+            const incidenciasResueltas = Number(planta.incidenciasResueltas) || 0;
+            
+            const tasaResolucion = totalIncidencias > 0 
+                ? Math.round((incidenciasResueltas / totalIncidencias) * 100)
+                : 100;
 
-                    return {
-                        id: planta.id,
-                        nombre: planta.nombre,
-                        ubicacion: planta.ubicacion,
-                        clienteId: planta.clienteId,
-                        tecnicoId: planta.tecnicoId,
-                        clienteNombre: planta.clienteNombre,
-                        tecnicoNombre: planta.tecnicoNombre,
-                        tasaResolucion: tasaResolucion,
-                        estados: {
-                            planta: planta.estado,
-                            incidenciasPendientes: Number(planta.incidenciasPendientes) || 0,
-                            incidenciasEnProgreso: Number(planta.incidenciasEnProgreso) || 0,
-                            incidenciasResueltas: incidenciasResueltas,
-                            mantenimientosPendientes: Number(planta.mantenimientosPendientes) || 0
-                        }
-                    };
-                });
+            return {
+                id: planta.id,
+                nombre: planta.nombre,
+                ubicacion: planta.ubicacion,
+                clienteId: planta.clienteId,
+                tecnicoId: planta.tecnicoId,
+                clienteNombre: planta.clienteNombre,
+                tecnicoNombre: planta.tecnicoNombre,
+                tasaResolucion: tasaResolucion,
+                estados: {
+                    planta: planta.estado,
+                    incidenciasPendientes: Number(planta.incidenciasPendientes) || 0,
+                    incidenciasEnProgreso: Number(planta.incidenciasEnProgreso) || 0,
+                    incidenciasResueltas: incidenciasResueltas,
+                    mantenimientosPendientes: Number(planta.mantenimientosPendientes) || 0
+                }
+            };
+        });
         
     } catch (error) {
         console.error('❌ [PLANTA MODEL] Error en obtenerPlantasConEstados:', error);
@@ -455,13 +488,21 @@ static async obtenerPlantasConEstados() {
     }
 }
 
-
-
-static async obtenerResumenDashboard() {
+static async obtenerResumenDashboard(filtros = {}) {
     try {
-        console.log('🎯 [PLANTA MODEL] Obteniendo resumen dashboard');
+        console.log('🎯 [PLANTA MODEL] Obteniendo resumen dashboard - Filtros:', filtros);
         
-        const [resumen] = await pool.execute(`
+        let whereClause = 'WHERE 1=1';
+        const valores = [];
+        
+        // ✅ AGREGAR FILTRO por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND p.id IN (${placeholders})`;
+            valores.push(...filtros.plantaIds);
+        }
+        
+        const query = `
             SELECT 
                 p.id,
                 p.nombre,
@@ -471,11 +512,17 @@ static async obtenerResumenDashboard() {
                 (SELECT COUNT(*) FROM incidencias i WHERE i.plantId = p.id AND i.estado = 'pendiente') as incidenciasPendientes,
                 (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId = p.id AND m.estado = 'pendiente') as mantenimientosPendientes
             FROM plants p
+            ${whereClause}
             ORDER BY p.nombre
             LIMIT 10
-        `);
+        `;
 
-        console.log('✅ [PLANTA MODEL] Resumen dashboard obtenido');
+        console.log('🔍 [PLANTA MODEL] Query resumen dashboard:', query);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        
+        const [resumen] = await pool.execute(query, valores);
+        
+        console.log('✅ [PLANTA MODEL] Resumen dashboard obtenido:', resumen.length);
         
         return resumen.map(item => ({
             id: item.id,
@@ -485,7 +532,6 @@ static async obtenerResumenDashboard() {
             ultimaLectura: item.ultimaLectura,
             incidenciasPendientes: parseInt(item.incidenciasPendientes) || 0,
             mantenimientosPendientes: parseInt(item.mantenimientosPendientes) || 0,
-        
             estado: item.incidenciasPendientes > 0 ? 'con_incidencias' : 'operativa'
         }));
         
@@ -494,5 +540,6 @@ static async obtenerResumenDashboard() {
         throw new Error(`Error obteniendo resumen dashboard: ${error.message}`);
     }
 }
+
 
 }

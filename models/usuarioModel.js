@@ -291,4 +291,132 @@ static async obtenerTodos(limite = 50, pagina = 1, rol = null) {
             throw new Error(`Error actualizando rol: ${error.message}`);
         }
     }
+
+  // ✅ Obtener plantas asignadas al usuario desde usuario_plantas
+    static async obtenerPlantasAsignadas(usuarioId) {
+        try {
+            const [plantas] = await pool.execute(
+                `SELECT p.*, up.tipo_usuario 
+                 FROM usuario_plantas up 
+                 JOIN plantas p ON up.planta_id = p.id 
+                 WHERE up.usuario_id = ?`,
+                [usuarioId]
+            );
+            return plantas;
+        } catch (error) {
+            throw new Error(`Error al obtener plantas asignadas: ${error.message}`);
+        }
+    }
+
+    // ✅ Obtener IDs de plantas asignadas al usuario
+    static async obtenerPlantaIdsAsignadas(usuarioId) {
+        try {
+            const [resultados] = await pool.execute(
+                `SELECT planta_id FROM usuario_plantas WHERE usuario_id = ?`,
+                [usuarioId]
+            );
+            return resultados.map(row => row.planta_id);
+        } catch (error) {
+            throw new Error(`Error al obtener IDs de plantas: ${error.message}`);
+        }
+    }
+
+    // ✅ Asignar planta a usuario
+    static async asignarPlanta(usuarioId, plantaId, tipoUsuario = 'tecnico') {
+        try {
+            // Verificar si ya existe la asignación
+            const [existe] = await pool.execute(
+                `SELECT id FROM usuario_plantas WHERE usuario_id = ? AND planta_id = ?`,
+                [usuarioId, plantaId]
+            );
+
+            if (existe.length > 0) {
+                // Actualizar asignación existente
+                await pool.execute(
+                    `UPDATE usuario_plantas SET tipo_usuario = ? WHERE usuario_id = ? AND planta_id = ?`,
+                    [tipoUsuario, usuarioId, plantaId]
+                );
+            } else {
+                // Crear nueva asignación
+                await pool.execute(
+                    `INSERT INTO usuario_plantas (usuario_id, planta_id, tipo_usuario) VALUES (?, ?, ?)`,
+                    [usuarioId, plantaId, tipoUsuario]
+                );
+            }
+
+            return true;
+        } catch (error) {
+            throw new Error(`Error al asignar planta: ${error.message}`);
+        }
+    }
+
+    // ✅ Remover asignación de planta
+    static async removerPlanta(usuarioId, plantaId) {
+        try {
+            const [resultado] = await pool.execute(
+                `DELETE FROM usuario_plantas WHERE usuario_id = ? AND planta_id = ?`,
+                [usuarioId, plantaId]
+            );
+            return resultado.affectedRows > 0;
+        } catch (error) {
+            throw new Error(`Error al remover planta: ${error.message}`);
+        }
+    }
+
+    // ✅ Verificar si usuario tiene acceso a planta específica
+    static async tieneAccesoAPlanta(usuarioId, plantaId) {
+        try {
+            // Superadmin tiene acceso a todo
+            const usuario = await this.buscarPorId(usuarioId);
+            if (usuario.rol === 'superadmin') {
+                return true;
+            }
+
+            // Para otros roles, verificar en usuario_plantas
+            const [acceso] = await pool.execute(
+                `SELECT id FROM usuario_plantas WHERE usuario_id = ? AND planta_id = ?`,
+                [usuarioId, plantaId]
+            );
+
+            return acceso.length > 0;
+        } catch (error) {
+            throw new Error(`Error al verificar acceso: ${error.message}`);
+        }
+    }
+
+    // ✅ Obtener usuarios por planta
+    static async obtenerUsuariosPorPlanta(plantaId) {
+        try {
+            const [usuarios] = await pool.execute(
+                `SELECT u.id, u.nombre, u.email, u.rol, up.tipo_usuario 
+                 FROM usuario_plantas up 
+                 JOIN users u ON up.usuario_id = u.id 
+                 WHERE up.planta_id = ?`,
+                [plantaId]
+            );
+            return usuarios;
+        } catch (error) {
+            throw new Error(`Error al obtener usuarios por planta: ${error.message}`);
+        }
+    }
+
+    // ✅ Obtener usuario completo con plantas asignadas
+    static async buscarCompletoPorId(id) {
+        try {
+            const usuario = await this.buscarPorId(id);
+            if (!usuario) {
+                return null;
+            }
+
+            // Obtener plantas asignadas
+            const plantasAsignadas = await this.obtenerPlantasAsignadas(id);
+            usuario.plantasAsignadas = plantasAsignadas;
+
+            return usuario;
+        } catch (error) {
+            throw new Error(`Error al obtener usuario completo: ${error.message}`);
+        }
+    }
 }
+
+

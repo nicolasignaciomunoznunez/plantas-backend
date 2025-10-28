@@ -51,10 +51,11 @@ export const crearIncidencia = async (req, res) => {
         });
     }
 };
-
 export const obtenerIncidencia = async (req, res) => {
     try {
         const { id } = req.params;
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+        
         const incidencia = await Incidencia.buscarPorId(id);
 
         if (!incidencia) {
@@ -70,6 +71,16 @@ export const obtenerIncidencia = async (req, res) => {
                 success: false,
                 message: "No tienes permisos para ver esta incidencia"
             });
+        }
+
+        // ✅ VERIFICAR ACCESO A LA PLANTA DE LA INCIDENCIA
+        if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
+            if (!filtrosPlanta.plantaIds.includes(incidencia.plantId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: "No tienes acceso a la planta de esta incidencia"
+                });
+            }
         }
 
         res.status(200).json({
@@ -88,27 +99,29 @@ export const obtenerIncidencia = async (req, res) => {
 export const obtenerIncidencias = async (req, res) => {
     try {
         const { limite = 10, pagina = 1 } = req.query;
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
         
         console.log('🔐 [CONTROLLER] Usuario solicitando incidencias:', {
             usuarioId: req.usuarioId,
             usuario: req.usuario,
-            rol: req.usuario?.rol
+            rol: req.usuario?.rol,
+            filtrosPlanta // ✅ Mostrar filtros
         });
 
         // ✅ CONFIGURAR FILTROS SEGÚN ROL
-        let filtros = {};
+        let filtros = { ...filtrosPlanta }; // ✅ COPIAR filtros de plantas
         
         // ✅ SI ES CLIENTE, SOLO VER SUS PROPIAS INCIDENCIAS
         if (req.usuario?.rol === 'cliente') {
             filtros.userId = req.usuarioId;
             console.log('👤 [CONTROLLER] Filtrando para cliente - userId:', req.usuarioId);
         }
-        // ✅ Técnicos y Admin ven TODAS las incidencias (sin filtro)
+        // ✅ Técnicos y Admin ven TODAS las incidencias de SUS plantas (filtrosPlanta ya aplicado)
         
         const incidencias = await Incidencia.obtenerTodas(
             parseInt(limite), 
             parseInt(pagina),
-            filtros // ✅ Pasar los filtros al modelo
+            filtros // ✅ Pasar los filtros combinados al modelo
         );
 
         console.log('✅ [CONTROLLER] Incidencias devueltas:', incidencias.length, 'para rol:', req.usuario?.rol);
@@ -121,7 +134,7 @@ export const obtenerIncidencias = async (req, res) => {
                 pagina: parseInt(pagina),
                 total: incidencias.length
             },
-            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'todas'
+            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'plantas_asignadas'
         });
     } catch (error) {
         console.log("Error al obtener incidencias:", error);
@@ -135,14 +148,26 @@ export const obtenerIncidencias = async (req, res) => {
 export const obtenerIncidenciasPlanta = async (req, res) => {
     try {
         const { plantId } = req.params;
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
         
         console.log('🔐 [CONTROLLER] Usuario solicitando incidencias de planta:', {
             usuarioId: req.usuarioId,
             rol: req.usuario?.rol,
-            plantId
+            plantId,
+            filtrosPlanta // ✅ Mostrar filtros
         });
 
-        let filtros = { plantId };
+        // ✅ VERIFICAR ACCESO A LA PLANTA
+        if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
+            if (!filtrosPlanta.plantaIds.includes(parseInt(plantId))) {
+                return res.status(403).json({
+                    success: false,
+                    message: "No tienes acceso a esta planta"
+                });
+            }
+        }
+
+        let filtros = { plantId, ...filtrosPlanta }; // ✅ COMBINAR filtros
         
         // ✅ SI ES CLIENTE, SOLO VER SUS INCIDENCIAS EN ESA PLANTA
         if (req.usuario?.rol === 'cliente') {
@@ -156,7 +181,7 @@ export const obtenerIncidenciasPlanta = async (req, res) => {
             success: true,
             incidencias,
             total: incidencias.length,
-            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'todas'
+            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'plantas_asignadas'
         });
     } catch (error) {
         console.log("Error al obtener incidencias de planta:", error);
@@ -170,14 +195,16 @@ export const obtenerIncidenciasPlanta = async (req, res) => {
 export const obtenerIncidenciasEstado = async (req, res) => {
     try {
         const { estado } = req.params;
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
         
         console.log('🔐 [CONTROLLER] Usuario solicitando incidencias por estado:', {
             usuarioId: req.usuarioId,
             rol: req.usuario?.rol,
-            estado
+            estado,
+            filtrosPlanta // ✅ Mostrar filtros
         });
 
-        let filtros = { estado };
+        let filtros = { estado, ...filtrosPlanta }; // ✅ COMBINAR filtros
         
         // ✅ SI ES CLIENTE, SOLO VER SUS INCIDENCIAS EN ESE ESTADO
         if (req.usuario?.rol === 'cliente') {
@@ -191,7 +218,7 @@ export const obtenerIncidenciasEstado = async (req, res) => {
             success: true,
             incidencias,
             total: incidencias.length,
-            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'todas'
+            filtro: req.usuario?.rol === 'cliente' ? 'mis_incidencias' : 'plantas_asignadas'
         });
     } catch (error) {
         console.log("Error al obtener incidencias por estado:", error);
@@ -321,13 +348,23 @@ export const eliminarIncidencia = async (req, res) => {
 
 export const obtenerIncidenciasResumen = async (req, res) => {
   try {
-    const resumen = await Incidencia.obtenerResumenDashboard();
-    res.json({ success: true, ...resumen });
+    const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+    
+    console.log('📊 [INCIDENCIA CONTROLLER] Obteniendo resumen con filtros:', filtrosPlanta);
+    
+    // ✅ CORREGIDO: Pasar filtros al modelo
+    const resumen = await Incidencia.obtenerResumenDashboard(filtrosPlanta);
+    
+    res.json({ 
+        success: true, 
+        ...resumen,
+        filtrosAplicados: filtrosPlanta // Para debug
+    });
   } catch (error) {
+    console.error('❌ [INCIDENCIA CONTROLLER] Error obteniendo resumen:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
-
 
 
 
@@ -495,6 +532,8 @@ export const completarIncidencia = async (req, res) => {
 export const obtenerIncidenciaCompleta = async (req, res) => {
     try {
         const { id } = req.params;
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+        
         const incidencia = await Incidencia.buscarCompletaPorId(id);
 
         if (!incidencia) {
@@ -510,6 +549,16 @@ export const obtenerIncidenciaCompleta = async (req, res) => {
                 success: false,
                 message: "No tienes permisos para ver esta incidencia"
             });
+        }
+
+        // ✅ VERIFICAR ACCESO A LA PLANTA DE LA INCIDENCIA
+        if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
+            if (!filtrosPlanta.plantaIds.includes(incidencia.plantId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: "No tienes acceso a la planta de esta incidencia"
+                });
+            }
         }
 
         res.status(200).json({
@@ -590,7 +639,7 @@ export const eliminarMaterial = async (req, res) => {
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
-        
+        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
         console.log('🎯 [PDF DEBUG] Iniciando generación de PDF para incidencia:', id);
 
         // Obtener datos completos
@@ -599,7 +648,15 @@ export const generarReportePDF = async (req, res) => {
         if (!incidencia) {
             return res.status(404).json({ success: false, message: "Incidencia no encontrada" });
         }
-
+        
+            if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
+            if (!filtrosPlanta.plantaIds.includes(incidencia.plantId)) {
+                return res.status(403).json({
+                    success: false,
+                    message: "No tienes acceso al reporte de esta incidencia"
+                });
+            }
+        }
         // Crear documento PDF
         const doc = new PDFDocument({ 
             margin: 50,

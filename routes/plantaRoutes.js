@@ -15,7 +15,10 @@ import {
     obtenerPlantasCompletas
 } from "../controllers/plantaController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
-import { filtrarPlantasPorRol } from "../middlewares/verificarPlantaRol.js";
+import { 
+    filtrarPlantasPorRol,
+    prevenirCreacionPlantas 
+} from "../middlewares/verificarPlantaRol.js";
 
 const router = express.Router();
 
@@ -24,21 +27,24 @@ router.use(verificarToken);
 
 // ==================== RUTAS GENERALES DE PLANTAS ====================
 router.get("/", filtrarPlantasPorRol(), obtenerPlantas);
-router.get("/:id", obtenerPlanta);
-router.get("/cliente/:clienteId", obtenerPlantasCliente);
+router.get("/:id", filtrarPlantasPorRol(), obtenerPlanta);
+router.get("/cliente/:clienteId", verificarRol(['superadmin', 'admin']), obtenerPlantasCliente);
 
-// ==================== RUTAS DE GESTIÓN (ADMIN/TÉCNICO) ====================
-router.post("/", verificarRol(['superadmin', 'admin', 'tecnico']), crearPlanta);
-router.put("/:id", verificarRol(['superadmin', 'admin', 'tecnico']), actualizarPlanta);
+// ==================== RUTAS DE GESTIÓN ====================
+// ✅ CORREGIDO: Solo superadmin puede crear plantas
+router.post("/", prevenirCreacionPlantas(), crearPlanta);
+
+// ✅ CORREGIDO: Solo superadmin y admin pueden actualizar/eliminar
+router.put("/:id", verificarRol(['superadmin', 'admin']), actualizarPlanta);
 router.delete("/:id", verificarRol(['superadmin', 'admin']), eliminarPlanta);
 
-// ==================== RUTAS DE ASIGNACIÓN (SUPERADMIN/ADMIN) ====================
+// ==================== RUTAS DE ASIGNACIÓN ====================
 router.post('/asignar', verificarRol(['superadmin', 'admin']), asignarPlantaUsuario);
 router.get('/usuario/:usuarioId', verificarRol(['superadmin', 'admin']), obtenerPlantasUsuario);
 
-// ==================== ✅ NUEVAS RUTAS MUCHOS-A-MUCHOS ====================
+// ==================== RUTAS MUCHOS-A-MUCHOS ====================
 // Obtener planta completa con técnicos y clientes
-router.get('/:id/completa', obtenerPlantaCompleta);
+router.get('/:id/completa', filtrarPlantasPorRol(), obtenerPlantaCompleta);
 
 // Asignar múltiples técnicos a una planta
 router.post('/:id/asignar-tecnicos', verificarRol(['superadmin', 'admin']), asignarMultiplesTecnicos);
@@ -46,7 +52,7 @@ router.post('/:id/asignar-tecnicos', verificarRol(['superadmin', 'admin']), asig
 // Asignar múltiples clientes a una planta  
 router.post('/:id/asignar-clientes', verificarRol(['superadmin', 'admin']), asignarMultiplesClientes);
 
-// Obtener todas las plantas con relaciones completas (para administración)
-router.get('/completas/completas', verificarRol(['superadmin', 'admin']), obtenerPlantasCompletas);
+// Obtener todas las plantas con relaciones completas (solo superadmin)
+router.get('/completas/completas', verificarRol(['superadmin']), obtenerPlantasCompletas);
 
 export default router;

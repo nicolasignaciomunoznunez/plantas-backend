@@ -86,6 +86,13 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         const condiciones = [];
         const parametros = [];
         
+        // ✅ NUEVO: Filtrar por plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            condiciones.push(`i.plantId IN (${placeholders})`);
+            parametros.push(...filtros.plantaIds);
+        }
+        
         if (filtros.userId) {
             condiciones.push('i.userId = ?');
             parametros.push(filtros.userId);
@@ -105,10 +112,9 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
             query += ` WHERE ${condiciones.join(' AND ')}`;
         }
         
-        // ✅ ALTERNATIVA: Usar template literals para números (más seguro)
         query += ` ORDER BY i.fechaReporte DESC LIMIT ${limiteNum} OFFSET ${offset}`;
         
-        console.log('🔍 [MODEL] Query obtenerTodas:', { query, parametros });
+        console.log('🔍 [INCIDENCIA MODEL] Query obtenerTodas:', { query, parametros });
         
         const [incidencias] = await pool.execute(query, parametros);
         
@@ -294,26 +300,35 @@ static async obtenerPorPlantaYRangoFechas(plantId, fechaInicio, fechaFin) {
     ////////////nuevos metodos para dashboard
 
 
-static async obtenerRecientes(limite = 10) {
+static async obtenerRecientes(limite = 10, filtros = {}) {
     try {
-        console.log('🔄 [INCIDENCIA MODEL] Obteniendo incidencias recientes');
+        console.log('🔄 [INCIDENCIA MODEL] Obteniendo incidencias recientes - Filtros:', filtros);
         
-        // ✅ USAR EL MISMO PATRÓN QUE obtenerTodas (template literal)
         const limiteNum = Number(limite) || 10;
         
-        // ✅ TEMPLATE LITERAL PARA LIMIT (igual que en obtenerTodas)
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE i.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
+        
         const query = `
             SELECT i.*, u.nombre as usuarioNombre, p.nombre as plantaNombre 
             FROM incidencias i 
             LEFT JOIN users u ON i.userId = u.id 
             LEFT JOIN plants p ON i.plantId = p.id 
+            ${whereClause}
             ORDER BY i.fechaReporte DESC 
             LIMIT ${limiteNum}
         `;
         
-        console.log('🔍 [INCIDENCIA MODEL] Query obtenerRecientes:', { query });
+        console.log('🔍 [INCIDENCIA MODEL] Query obtenerRecientes:', { query, parametros });
         
-        const [incidencias] = await pool.execute(query);
+        const [incidencias] = await pool.execute(query, parametros);
 
         console.log('✅ [INCIDENCIA MODEL] Incidencias recientes obtenidas:', incidencias.length);
         
@@ -324,15 +339,26 @@ static async obtenerRecientes(limite = 10) {
     }
 }
 
-static async obtenerResumenDashboard() {
+static async obtenerResumenDashboard(filtros = {}) {
     try {
-        console.log('📊 [INCIDENCIA MODEL] Obteniendo resumen para dashboard');
+        console.log('📊 [INCIDENCIA MODEL] Obteniendo resumen para dashboard - Filtros:', filtros);
+        
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE i.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
         
         const [resumen] = await pool.execute(`
             SELECT 
                 estado,
                 COUNT(*) as cantidad
-            FROM incidencias 
+            FROM incidencias i
+            ${whereClause}
             GROUP BY estado
             ORDER BY 
                 CASE estado 
@@ -340,15 +366,16 @@ static async obtenerResumenDashboard() {
                     WHEN 'en_progreso' THEN 2  
                     WHEN 'resuelto' THEN 3
                 END
-        `);
+        `, parametros);
 
         const [recientes] = await pool.execute(`
             SELECT i.*, p.nombre as plantaNombre
             FROM incidencias i
             LEFT JOIN plants p ON i.plantId = p.id
+            ${whereClause}
             ORDER BY i.fechaReporte DESC
             LIMIT 5
-        `);
+        `, parametros);
 
         console.log('✅ [INCIDENCIA MODEL] Resumen dashboard obtenido');
         
@@ -366,9 +393,19 @@ static async obtenerResumenDashboard() {
     }
 }
 
-static async obtenerEstadisticasPorPlanta() {
+static async obtenerEstadisticasPorPlanta(filtros = {}) {
     try {
-        console.log('📈 [INCIDENCIA MODEL] Obteniendo estadísticas por planta');
+        console.log('📈 [INCIDENCIA MODEL] Obteniendo estadísticas por planta - Filtros:', filtros);
+        
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE p.id IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
         
         const [estadisticas] = await pool.execute(`
             SELECT 
@@ -380,9 +417,10 @@ static async obtenerEstadisticasPorPlanta() {
                 COUNT(CASE WHEN i.estado = 'resuelto' THEN 1 END) as resueltas
             FROM plants p
             LEFT JOIN incidencias i ON p.id = i.plantId
+            ${whereClause}
             GROUP BY p.id, p.nombre
             ORDER BY totalIncidencias DESC
-        `);
+        `, parametros);
 
         console.log('✅ [INCIDENCIA MODEL] Estadísticas por planta obtenidas');
         

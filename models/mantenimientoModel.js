@@ -127,56 +127,94 @@ export class Mantenimiento {
     }
 
     // Obtener mantenimientos por planta
-    static async obtenerPorPlanta(plantId) {
-        try {
-            const [mantenimientos] = await pool.execute(
-                `SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
-                 FROM mantenimientos m 
-                 LEFT JOIN users u ON m.userId = u.id 
-                 LEFT JOIN plants p ON m.plantId = p.id 
-                 WHERE m.plantId = ? 
-                 ORDER BY m.fechaProgramada DESC`,
-                [plantId]
-            );
-
-            return mantenimientos.map(mantenimiento => new Mantenimiento(mantenimiento));
-        } catch (error) {
-            throw new Error(`Error al obtener mantenimientos por planta: ${error.message}`);
+static async obtenerPorPlanta(plantId, filtros = {}) {
+    try {
+        let whereClause = 'WHERE m.plantId = ?';
+        const parametros = [plantId];
+        
+        // ✅ NUEVO: Verificar que la planta esté en los filtros del usuario
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            if (!filtros.plantaIds.includes(parseInt(plantId))) {
+                // El usuario no tiene acceso a esta planta
+                return [];
+            }
         }
+        
+        if (filtros.estado) {
+            whereClause += ` AND m.estado = ?`;
+            parametros.push(filtros.estado);
+        }
+        
+        const query = `
+            SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
+            FROM mantenimientos m 
+            LEFT JOIN users u ON m.userId = u.id 
+            LEFT JOIN plants p ON m.plantId = p.id 
+            ${whereClause}
+            ORDER BY m.fechaProgramada DESC
+        `;
+        
+        console.log('🔍 [MANTENIMIENTO MODEL] Query obtenerPorPlanta:', { query, parametros });
+        
+        const [mantenimientos] = await pool.execute(query, parametros);
+
+        return mantenimientos.map(mantenimiento => new Mantenimiento(mantenimiento));
+    } catch (error) {
+        throw new Error(`Error al obtener mantenimientos por planta: ${error.message}`);
     }
+}
 
     // Obtener mantenimientos por técnico
-    static async obtenerPorTecnico(userId) {
-        try {
-            const [mantenimientos] = await pool.execute(
-                `SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
-                 FROM mantenimientos m 
-                 LEFT JOIN users u ON m.userId = u.id 
-                 LEFT JOIN plants p ON m.plantId = p.id 
-                 WHERE m.userId = ? 
-                 ORDER BY m.fechaProgramada DESC`,
-                [userId]
-            );
-
-            return mantenimientos.map(mantenimiento => new Mantenimiento(mantenimiento));
-        } catch (error) {
-            throw new Error(`Error al obtener mantenimientos por técnico: ${error.message}`);
-        }
-    }
-
-
-// En models/mantenimientoModel.js - SIN PARÁMETROS
-static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
+static async obtenerPorTecnico(userId, filtros = {}) {
     try {
-        console.log('🔍 [MODEL] Versión SIN parámetros');
+        let whereClause = 'WHERE m.userId = ?';
+        const parametros = [userId];
         
-        // Usar valores directos sin parámetros preparados
+        // ✅ NUEVO: Filtrar por plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND m.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
+        
+        const query = `
+            SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
+            FROM mantenimientos m 
+            LEFT JOIN users u ON m.userId = u.id 
+            LEFT JOIN plants p ON m.plantId = p.id 
+            ${whereClause}
+            ORDER BY m.fechaProgramada DESC
+        `;
+        
+        console.log('🔍 [MANTENIMIENTO MODEL] Query obtenerPorTecnico:', { query, parametros });
+        
+        const [mantenimientos] = await pool.execute(query, parametros);
+
+        return mantenimientos.map(mantenimiento => new Mantenimiento(mantenimiento));
+    } catch (error) {
+        throw new Error(`Error al obtener mantenimientos por técnico: ${error.message}`);
+    }
+}
+
+
+
+static async obtenerTodos({ limite = 50, offset = 0, filtros = {} } = {}) {
+    try {
+        console.log('🔍 [MANTENIMIENTO MODEL] Versión CON filtros:', { filtros });
+        
         const limitNum = parseInt(limite) || 50;
         const offsetNum = parseInt(offset) || 0;
 
-        console.log('🔢 Parámetros directos:', { limitNum, offsetNum });
+        let whereClause = 'WHERE 1=1';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND m.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
 
-        // ✅ CONSULTA SIN PARÁMETROS PREPARADOS
         const query = `
             SELECT 
                 m.*, 
@@ -185,16 +223,22 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
             FROM mantenimientos m 
             LEFT JOIN users u ON m.userId = u.id 
             LEFT JOIN plants p ON m.plantId = p.id 
+            ${whereClause}
             ORDER BY m.fechaProgramada DESC 
             LIMIT ${limitNum} OFFSET ${offsetNum}
         `;
 
-        console.log('📝 Ejecutando query directa...');
-        const [mantenimientos] = await pool.execute(query);
+        console.log('📝 [MANTENIMIENTO MODEL] Query con filtros:', query);
+        console.log('🔍 [MANTENIMIENTO MODEL] Parámetros:', parametros);
+        
+        const [mantenimientos] = await pool.execute(query, parametros);
         console.log('✅ Mantenimientos encontrados:', mantenimientos.length);
 
-        // Obtener el total
-        const [totalResult] = await pool.execute(`SELECT COUNT(*) as total FROM mantenimientos`);
+        // Obtener el total con filtros
+        const [totalResult] = await pool.execute(
+            `SELECT COUNT(*) as total FROM mantenimientos m ${whereClause}`,
+            parametros
+        );
         const total = totalResult[0]?.total || 0;
 
         return {
@@ -202,36 +246,8 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
             count: total
         };
     } catch (error) {
-        console.error('❌ [MODEL] Error en versión sin parámetros:', error);
-        
-        // ✅ VERSIÓN MÍNIMA ABSOLUTA
-        try {
-            console.log('🔄 Intentando consulta mínima...');
-            const [mantenimientos] = await pool.execute(
-                `SELECT * FROM mantenimientos ORDER BY fechaProgramada DESC LIMIT 10`
-            );
-            
-            console.log('✅ Mantenimientos mínimos:', mantenimientos.length);
-            
-            const mantenimientosConNombres = mantenimientos.map(m => ({
-                ...m,
-                tecnicoNombre: `Usuario ${m.userId}`,
-                plantaNombre: `Planta ${m.plantId}`
-            }));
-
-            return {
-                rows: mantenimientosConNombres.map(m => new Mantenimiento(m)),
-                count: mantenimientos.length
-            };
-        } catch (minError) {
-            console.error('❌ Error en consulta mínima:', minError);
-            
-            // ✅ ÚLTIMO RESORTE: Array vacío
-            return {
-                rows: [],
-                count: 0
-            };
-        }
+        console.error('❌ [MANTENIMIENTO MODEL] Error en obtenerTodos con filtros:', error);
+        throw new Error(`Error al obtener mantenimientos: ${error.message}`);
     }
 }
 
@@ -332,27 +348,35 @@ static async obtenerTodos({ limite = 50, offset = 0 } = {}) {
 
 
 ///////////nuevos metodos////////////
-static async obtenerPendientesProximos(limite = 10) {
+static async obtenerPendientesProximos(limite = 10, filtros = {}) {
     try {
-        console.log('🔧 [MANTENIMIENTO MODEL] Obteniendo pendientes próximos');
+        console.log('🔧 [MANTENIMIENTO MODEL] Obteniendo pendientes próximos - Filtros:', filtros);
         
         const limiteNum = Number(limite) || 10;
         
-        // ✅ TEMPLATE LITERAL PARA LIMIT
+        let whereClause = `WHERE m.estado = 'pendiente' AND m.fechaProgramada >= CURDATE()`;
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND m.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
+        
         const query = `
             SELECT m.*, u.nombre as tecnicoNombre, p.nombre as plantaNombre 
             FROM mantenimientos m 
             LEFT JOIN users u ON m.userId = u.id 
             LEFT JOIN plants p ON m.plantId = p.id 
-            WHERE m.estado = 'pendiente' 
-            AND m.fechaProgramada >= CURDATE()
+            ${whereClause}
             ORDER BY m.fechaProgramada ASC 
             LIMIT ${limiteNum}
         `;
         
-        console.log('🔍 [MANTENIMIENTO MODEL] Query obtenerPendientesProximos:', { query });
+        console.log('🔍 [MANTENIMIENTO MODEL] Query obtenerPendientesProximos:', { query, parametros });
         
-        const [mantenimientos] = await pool.execute(query);
+        const [mantenimientos] = await pool.execute(query, parametros);
 
         console.log('✅ [MANTENIMIENTO MODEL] Mantenimientos próximos obtenidos:', mantenimientos.length);
         
@@ -365,15 +389,26 @@ static async obtenerPendientesProximos(limite = 10) {
 
 
 
-static async obtenerResumenDashboard() {
+static async obtenerResumenDashboard(filtros = {}) {
     try {
-        console.log('📊 [MANTENIMIENTO MODEL] Obteniendo resumen para dashboard');
+        console.log('📊 [MANTENIMIENTO MODEL] Obteniendo resumen para dashboard - Filtros:', filtros);
+        
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE m.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
         
         const [resumen] = await pool.execute(`
             SELECT 
                 estado,
                 COUNT(*) as cantidad
-            FROM mantenimientos 
+            FROM mantenimientos m
+            ${whereClause}
             GROUP BY estado
             ORDER BY 
                 CASE estado 
@@ -381,17 +416,18 @@ static async obtenerResumenDashboard() {
                     WHEN 'en_progreso' THEN 2  
                     WHEN 'completado' THEN 3
                 END
-        `);
+        `, parametros);
 
         const [proximos] = await pool.execute(`
             SELECT m.*, p.nombre as plantaNombre
             FROM mantenimientos m
             LEFT JOIN plants p ON m.plantId = p.id
-            WHERE m.estado IN ('pendiente', 'en_progreso')
+            ${whereClause ? whereClause + ' AND ' : ' WHERE '} 
+            m.estado IN ('pendiente', 'en_progreso')
             AND m.fechaProgramada >= CURDATE()
             ORDER BY m.fechaProgramada ASC
             LIMIT 5
-        `);
+        `, parametros);
 
         console.log('✅ [MANTENIMIENTO MODEL] Resumen dashboard obtenido');
         
@@ -409,9 +445,19 @@ static async obtenerResumenDashboard() {
     }
 }
 
-static async obtenerEstadisticasPorPlanta() {
+static async obtenerEstadisticasPorPlanta(filtros = {}) {
     try {
-        console.log('📈 [MANTENIMIENTO MODEL] Obteniendo estadísticas por planta');
+        console.log('📈 [MANTENIMIENTO MODEL] Obteniendo estadísticas por planta - Filtros:', filtros);
+        
+        let whereClause = '';
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause = ` WHERE p.id IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
         
         const [estadisticas] = await pool.execute(`
             SELECT 
@@ -425,9 +471,10 @@ static async obtenerEstadisticasPorPlanta() {
                 COUNT(CASE WHEN m.tipo = 'correctivo' THEN 1 END) as correctivos
             FROM plants p
             LEFT JOIN mantenimientos m ON p.id = m.plantId
+            ${whereClause}
             GROUP BY p.id, p.nombre
             ORDER BY totalMantenimientos DESC
-        `);
+        `, parametros);
 
         console.log('✅ [MANTENIMIENTO MODEL] Estadísticas por planta obtenidas');
         
@@ -448,19 +495,32 @@ static async obtenerEstadisticasPorPlanta() {
     }
 }
 
-static async obtenerMantenimientosVencidos() {
+static async obtenerMantenimientosVencidos(filtros = {}) {
     try {
-        console.log('⚠️ [MANTENIMIENTO MODEL] Obteniendo mantenimientos vencidos');
+        console.log('⚠️ [MANTENIMIENTO MODEL] Obteniendo mantenimientos vencidos - Filtros:', filtros);
         
-        const [vencidos] = await pool.execute(`
+        let whereClause = `WHERE m.estado = 'pendiente' AND m.fechaProgramada < CURDATE()`;
+        const parametros = [];
+        
+        // ✅ NUEVO: Filtrar por plantaIds
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND m.plantId IN (${placeholders})`;
+            parametros.push(...filtros.plantaIds);
+        }
+        
+        const query = `
             SELECT m.*, p.nombre as plantaNombre, u.nombre as tecnicoNombre
             FROM mantenimientos m
             LEFT JOIN plants p ON m.plantId = p.id
             LEFT JOIN users u ON m.userId = u.id
-            WHERE m.estado = 'pendiente'
-            AND m.fechaProgramada < CURDATE()
+            ${whereClause}
             ORDER BY m.fechaProgramada ASC
-        `);
+        `;
+        
+        console.log('🔍 [MANTENIMIENTO MODEL] Query obtenerMantenimientosVencidos:', { query, parametros });
+        
+        const [vencidos] = await pool.execute(query, parametros);
 
         console.log('✅ [MANTENIMIENTO MODEL] Mantenimientos vencidos obtenidos:', vencidos.length);
         
