@@ -22,7 +22,7 @@ import {
     obtenerMantenimientosResumen
 } from "../controllers/mantenimientoController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
-import { uploadMantenimientos } from "../middlewares/upload.js"; // ✅ Usar tu config de Multer
+import { uploadMantenimientos } from "../middlewares/upload.js"; // ✅ CORREGIDO
 
 const router = express.Router();
 
@@ -31,16 +31,16 @@ router.use(verificarToken);
 
 // ✅ RUTAS DE CONSULTA
 router.get("/", obtenerMantenimientos);
-router.get("/resumen/dashboard", obtenerMantenimientosResumen); // ✅ Para dashboard
+router.get("/resumen/dashboard", obtenerMantenimientosResumen);
 router.get("/:id", obtenerMantenimiento);
-router.get("/:id/completo", obtenerMantenimientoCompleto); // ✅ Con fotos y materiales
+router.get("/:id/completo", obtenerMantenimientoCompleto);
 router.get("/planta/:plantId", obtenerMantenimientosPlanta);
 router.get("/tecnico/:userId", obtenerMantenimientosTecnico);
 
 // ✅ RUTAS PARA FOTOS Y ARCHIVOS
 router.post("/:id/fotos", 
     verificarRol(['admin', 'tecnico']), 
-    uploadMantenimientosMultiple, // ✅ Usar la configuración específica
+    uploadMantenimientos.array('fotos', 10), // ✅ CORREGIDO
     subirFotos
 );
 
@@ -100,7 +100,7 @@ router.put("/checklist/:itemId",
 
 // ✅ RUTA PARA REPORTE PDF
 router.get("/:id/reporte-pdf", 
-    generarReportePDF // ✅ Accesible para todos los roles autenticados
+    generarReportePDF
 );
 
 // ✅ SOLO ADMIN PUEDE ELIMINAR
