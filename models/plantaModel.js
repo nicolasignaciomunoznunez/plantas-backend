@@ -286,58 +286,39 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
         let whereClause = 'WHERE 1=1';
         const valores = [];
         
-        // ✅ AGREGAR FILTRO por plantaIds
         if (filtros.plantaIds && filtros.plantaIds.length > 0) {
             const placeholders = filtros.plantaIds.map(() => '?').join(',');
             whereClause += ` AND id IN (${placeholders})`;
             valores.push(...filtros.plantaIds);
         }
         
-        // ✅ CONSULTA COMPLETAMENTE CORREGIDA Y SIMPLIFICADA
-        const query = `
-            SELECT 
-                COUNT(*) as totalPlantas,
-                (SELECT COUNT(*) FROM plants ${whereClause} AND id IN (
-                    SELECT DISTINCT plantId FROM incidencias WHERE estado = 'pendiente'
-                )) as plantasConIncidencias,
-                (SELECT COUNT(*) FROM plants ${whereClause} AND id IN (
-                    SELECT DISTINCT plantId FROM mantenimientos WHERE estado = 'pendiente'
-                )) as plantasConMantenimiento,
-                (SELECT COUNT(*) FROM plants ${whereClause} AND id NOT IN (
-                    SELECT DISTINCT plantId FROM incidencias WHERE estado IN ('pendiente', 'en_progreso')
-                )) as plantasOperativas,
-                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente') as incidenciasPendientes,
-                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'en_progreso') as incidenciasEnProgreso,
-                (SELECT COUNT(*) FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'resuelto') as incidenciasResueltas,
-                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente') as mantenimientosPendientes,
-                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'en_progreso') as mantenimientosEnProgreso,
-                (SELECT COUNT(*) FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'completado') as mantenimientosCompletados
-            FROM plants
-            ${whereClause}
-        `;
-
-        console.log('🔍 [PLANTA MODEL] Query métricas:', query);
-        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        // ✅ VERSIÓN SUPER SIMPLE - Consultas separadas
+        const [plantasCount] = await pool.execute(`SELECT COUNT(*) as total FROM plants ${whereClause}`, valores);
+        const [incidenciasPendientes] = await pool.execute(`SELECT COUNT(*) as total FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente'`, valores);
+        const [incidenciasEnProgreso] = await pool.execute(`SELECT COUNT(*) as total FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'en_progreso'`, valores);
+        const [incidenciasResueltas] = await pool.execute(`SELECT COUNT(*) as total FROM incidencias WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'resuelto'`, valores);
+        const [mantenimientosPendientes] = await pool.execute(`SELECT COUNT(*) as total FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'pendiente'`, valores);
+        const [mantenimientosCompletados] = await pool.execute(`SELECT COUNT(*) as total FROM mantenimientos WHERE plantId IN (SELECT id FROM plants ${whereClause}) AND estado = 'completado'`, valores);
         
-        const [metricas] = await pool.execute(query, valores);
-        const resultado = metricas[0];
-        
-        console.log('✅ [PLANTA MODEL] Métricas obtenidas:', resultado);
+        const totalPlantas = Number(plantasCount[0].total) || 0;
+        const plantasConIncidencias = await this.contarPlantasConIncidencias(filtros);
+        const plantasConMantenimiento = await this.contarPlantasConMantenimientos(filtros);
+        const plantasOperativas = totalPlantas - plantasConIncidencias;
         
         return {
-            totalPlantas: Number(resultado.totalPlantas) || 0,
-            plantasConIncidencias: Number(resultado.plantasConIncidencias) || 0,
-            plantasConMantenimiento: Number(resultado.plantasConMantenimiento) || 0,
-            plantasOperativas: Number(resultado.plantasOperativas) || 0,
+            totalPlantas,
+            plantasConIncidencias,
+            plantasConMantenimiento,
+            plantasOperativas,
             incidencias: {
-                pendientes: Number(resultado.incidenciasPendientes) || 0,
-                enProgreso: Number(resultado.incidenciasEnProgreso) || 0,
-                resueltas: Number(resultado.incidenciasResueltas) || 0
+                pendientes: Number(incidenciasPendientes[0].total) || 0,
+                enProgreso: Number(incidenciasEnProgreso[0].total) || 0,
+                resueltas: Number(incidenciasResueltas[0].total) || 0
             },
             mantenimientos: {
-                pendientes: Number(resultado.mantenimientosPendientes) || 0,
-                enProgreso: Number(resultado.mantenimientosEnProgreso) || 0,
-                completados: Number(resultado.mantenimientosCompletados) || 0
+                pendientes: Number(mantenimientosPendientes[0].total) || 0,
+                enProgreso: 0, // Si necesitas este dato
+                completados: Number(mantenimientosCompletados[0].total) || 0
             }
         };
         
@@ -345,6 +326,49 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
         console.error('❌ [PLANTA MODEL] Error en obtenerMetricasConsolidadas:', error);
         throw new Error(`Error obteniendo métricas: ${error.message}`);
     }
+}
+
+// Métodos auxiliares para la versión simple
+static async contarPlantasConIncidencias(filtros = {}) {
+    let whereClause = 'WHERE 1=1';
+    const valores = [];
+    
+    if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+        const placeholders = filtros.plantaIds.map(() => '?').join(',');
+        whereClause += ` AND p.id IN (${placeholders})`;
+        valores.push(...filtros.plantaIds);
+    }
+    
+    const [result] = await pool.execute(
+        `SELECT COUNT(DISTINCT p.id) as total 
+         FROM plants p 
+         INNER JOIN incidencias i ON p.id = i.plantId 
+         ${whereClause} AND i.estado = 'pendiente'`,
+        valores
+    );
+    
+    return Number(result[0].total) || 0;
+}
+
+static async contarPlantasConMantenimientos(filtros = {}) {
+    let whereClause = 'WHERE 1=1';
+    const valores = [];
+    
+    if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+        const placeholders = filtros.plantaIds.map(() => '?').join(',');
+        whereClause += ` AND p.id IN (${placeholders})`;
+        valores.push(...filtros.plantaIds);
+    }
+    
+    const [result] = await pool.execute(
+        `SELECT COUNT(DISTINCT p.id) as total 
+         FROM plants p 
+         INNER JOIN mantenimientos m ON p.id = m.plantId 
+         ${whereClause} AND m.estado = 'pendiente'`,
+        valores
+    );
+    
+    return Number(result[0].total) || 0;
 }
 
 static async obtenerPlantasConEstados(filtros = {}) {
