@@ -21,14 +21,7 @@ const REPORTS_DIR = path.join(__dirname, '../../uploads/reports');
 
 export const crearMantenimiento = async (req, res) => {
     try {
-        // ✅ MANEJAR TANTO JSON COMO FORMDATA
-        let { plantId, tipo, descripcion, fechaProgramada, estado } = req.body;
-        
-        // Si viene de FormData, los campos pueden venir como strings
-        if (typeof plantId === 'string') {
-            plantId = parseInt(plantId);
-        }
-
+        const { plantId, tipo, descripcion, fechaProgramada, estado } = req.body;
         const userId = req.usuarioId;
 
         console.log('📥 Datos recibidos para crear mantenimiento:', {
@@ -51,19 +44,8 @@ export const crearMantenimiento = async (req, res) => {
             estado
         });
 
-        // ✅ SI HAY FOTOS EN LA REQUEST, PROCESARLAS
-        if (req.files && req.files.length > 0) {
-            console.log('📸 Procesando fotos para nuevo mantenimiento:', req.files.length);
-            
-            const fotosData = req.files.map(file => ({
-                tipo: 'antes',
-                ruta_archivo: `/uploads/mantenimientos/${file.originalname}`,
-                descripcion: file.originalname,
-                datos_imagen: file.buffer
-            }));
-
-            await Mantenimiento.subirFotos(nuevoMantenimiento.id, fotosData);
-        }
+        // ✅ NO procesar fotos aquí - se suben por separado
+        console.log('✅ Mantenimiento creado - ID:', nuevoMantenimiento.id);
 
         res.status(201).json({
             success: true,
@@ -317,6 +299,10 @@ export const subirFotos = async (req, res) => {
             });
         }
 
+        console.log('📸 Subiendo fotos para mantenimiento:', {
+            id, tipo, archivosCount: req.files.length
+        });
+
         const fotosSubidas = [];
         
         for (const file of req.files) {
@@ -329,7 +315,7 @@ export const subirFotos = async (req, res) => {
                 datos_imagen: imageBuffer
             };
             
-            console.log('📸 [MANTENIMIENTO] Subiendo foto:', {
+            console.log('📸 Insertando foto:', {
                 tieneBuffer: !!fotoData.datos_imagen,
                 bufferSize: fotoData.datos_imagen?.length,
                 tipo: fotoData.tipo
@@ -425,21 +411,18 @@ export const obtenerMantenimientoCompleto = async (req, res) => {
 export const iniciarMantenimiento = async (req, res) => {
     try {
         const { id } = req.params;
-        const { fotosAntes = [] } = req.body;
 
-        console.log('🔄 [MANTENIMIENTO] Iniciando mantenimiento:', { 
-            id, 
-            fotosAntesCount: fotosAntes.length 
-        });
+        console.log('🔄 Iniciando mantenimiento:', id);
 
-        const mantenimientoIniciado = await Mantenimiento.iniciarMantenimiento(id, fotosAntes);
+        // ✅ Solo cambiar estado - las fotos se suben por separado
+        const mantenimientoIniciado = await Mantenimiento.cambiarEstado(id, 'en_progreso');
 
         res.status(200).json({
             success: true,
             message: "Mantenimiento iniciado correctamente",
             mantenimiento: mantenimientoIniciado,
             suggestions: [
-                "Puedes subir fotos 'antes' del trabajo",
+                "Puedes subir fotos 'antes' del trabajo usando la ruta de subida de fotos",
                 "Registra los materiales que planeas usar",
                 "Completa el checklist durante la ejecución"
             ]
@@ -458,14 +441,7 @@ export const iniciarMantenimiento = async (req, res) => {
 export const completarMantenimiento = async (req, res) => {
     try {
         const { id } = req.params;
-        const { 
-            resumenTrabajo, 
-            materiales = [], 
-            checklistCompletado = [] 
-        } = req.body;
-
-        // ✅ OBTENER FOTOS DESDE req.files SI EXISTEN
-        const fotos = req.files || [];
+        const { resumenTrabajo, materiales = [] } = req.body; // ✅ Solo JSON
 
         if (!resumenTrabajo) {
             return res.status(400).json({
@@ -482,29 +458,15 @@ export const completarMantenimiento = async (req, res) => {
             });
         }
 
-        console.log('🔄 [MANTENIMIENTO] Completando mantenimiento:', { 
+        console.log('🔄 Completando mantenimiento:', { 
             id, 
-            materialesCount: materiales.length,
-            fotosCount: fotos.length,
-            checklistCount: checklistCompletado.length
+            materialesCount: materiales.length
         });
 
-        // ✅ PREPARAR DATOS DE FOTOS SI EXISTEN
-        let fotosData = [];
-        if (fotos.length > 0) {
-            fotosData = fotos.map(file => ({
-                tipo: 'despues',
-                ruta_archivo: `/uploads/mantenimientos/${file.originalname}`,
-                descripcion: `Foto después - ${file.originalname}`,
-                datos_imagen: file.buffer
-            }));
-        }
-
+        // ✅ Solo completar con resumen y materiales - fotos se suben por separado
         const datosCompletar = {
             resumenTrabajo,
-            materiales,
-            fotos: fotosData, // ✅ USAR FOTOS PREPARADAS
-            checklistCompletado
+            materiales
         };
 
         const mantenimientoCompletado = await Mantenimiento.completarMantenimiento(id, datosCompletar);
@@ -516,9 +478,8 @@ export const completarMantenimiento = async (req, res) => {
             pdfAvailable: true,
             pdfUrl: `/api/mantenimientos/${id}/reporte-pdf`,
             suggestions: [
-                "Puedes descargar el reporte PDF ahora usando el enlace proporcionado",
-                "El PDF incluirá todas las fotos, materiales y checklist completado",
-                "También puedes descargarlo más tarde desde la lista de mantenimientos"
+                "Puedes subir fotos 'después' usando la ruta de subida de fotos",
+                "Puedes descargar el reporte PDF usando el enlace proporcionado"
             ]
         });
 
@@ -530,6 +491,7 @@ export const completarMantenimiento = async (req, res) => {
         });
     }
 };
+
 
 // ✅ Eliminar foto de mantenimiento
 export const eliminarFoto = async (req, res) => {

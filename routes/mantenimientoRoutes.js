@@ -10,7 +10,6 @@ import {
     agregarItemChecklist,
     actualizarItemChecklist,
     eliminarMantenimiento,
-    // ✅ AGREGAR LOS NUEVOS CONTROLADORES
     subirFotos,
     agregarMateriales,
     obtenerMantenimientoCompleto,
