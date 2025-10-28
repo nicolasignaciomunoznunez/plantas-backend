@@ -21,8 +21,19 @@ const REPORTS_DIR = path.join(__dirname, '../../uploads/reports');
 
 export const crearMantenimiento = async (req, res) => {
     try {
-        const { plantId, tipo, descripcion, fechaProgramada, estado } = req.body;
+        // ✅ MANEJAR TANTO JSON COMO FORMDATA
+        let { plantId, tipo, descripcion, fechaProgramada, estado } = req.body;
+        
+        // Si viene de FormData, los campos pueden venir como strings
+        if (typeof plantId === 'string') {
+            plantId = parseInt(plantId);
+        }
+
         const userId = req.usuarioId;
+
+        console.log('📥 Datos recibidos para crear mantenimiento:', {
+            plantId, tipo, descripcion, fechaProgramada, estado, userId
+        });
 
         if (!plantId || !descripcion || !fechaProgramada) {
             return res.status(400).json({
@@ -39,6 +50,20 @@ export const crearMantenimiento = async (req, res) => {
             fechaProgramada,
             estado
         });
+
+        // ✅ SI HAY FOTOS EN LA REQUEST, PROCESARLAS
+        if (req.files && req.files.length > 0) {
+            console.log('📸 Procesando fotos para nuevo mantenimiento:', req.files.length);
+            
+            const fotosData = req.files.map(file => ({
+                tipo: 'antes',
+                ruta_archivo: `/uploads/mantenimientos/${file.originalname}`,
+                descripcion: file.originalname,
+                datos_imagen: file.buffer
+            }));
+
+            await Mantenimiento.subirFotos(nuevoMantenimiento.id, fotosData);
+        }
 
         res.status(201).json({
             success: true,
