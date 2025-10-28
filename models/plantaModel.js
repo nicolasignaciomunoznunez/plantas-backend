@@ -337,7 +337,6 @@ static async obtenerPorTecnico(tecnicoId) {
 
     /////////////////////////// nuevos metodos
 
-
 static async obtenerMetricasConsolidadas(filtros = {}) {
     try {
         console.log('📊 [PLANTA MODEL] Obteniendo métricas - Filtros:', filtros);
@@ -352,19 +351,19 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
             valores.push(...filtros.plantaIds);
         }
         
-        // ✅ CORREGIDO: Query sin referencia a 'p.id' en subconsultas
-        const [metricas] = await pool.execute(`
+        // ✅ CONSULTA COMPLETAMENTE CORREGIDA
+        const query = `
             SELECT 
                 COUNT(*) as totalPlantas,
                 SUM(CASE WHEN incidencias_pendientes > 0 THEN 1 ELSE 0 END) as plantasConIncidencias,
                 SUM(CASE WHEN mantenimientos_pendientes > 0 THEN 1 ELSE 0 END) as plantasConMantenimiento,
                 SUM(CASE WHEN incidencias_pendientes = 0 THEN 1 ELSE 0 END) as plantasOperativas,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'pendiente') as incidenciasPendientes,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'en_progreso') as incidenciasEnProgreso,
-                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT id FROM plants ${whereClause}) AND i.estado = 'resuelto') as incidenciasResueltas,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'pendiente') as mantenimientosPendientes,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'en_progreso') as mantenimientosEnProgreso,
-                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT id FROM plants ${whereClause}) AND m.estado = 'completado') as mantenimientosCompletados
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'pendiente') as incidenciasPendientes,
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'en_progreso') as incidenciasEnProgreso,
+                (SELECT COUNT(*) FROM incidencias i WHERE i.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND i.estado = 'resuelto') as incidenciasResueltas,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'pendiente') as mantenimientosPendientes,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'en_progreso') as mantenimientosEnProgreso,
+                (SELECT COUNT(*) FROM mantenimientos m WHERE m.plantId IN (SELECT p2.id FROM plants p2 ${whereClause}) AND m.estado = 'completado') as mantenimientosCompletados
             FROM (
                 SELECT 
                     p.id,
@@ -373,8 +372,12 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
                 FROM plants p
                 ${whereClause}
             ) as plantas_metrics
-        `, valores);
+        `;
 
+        console.log('🔍 [PLANTA MODEL] Query métricas:', query);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
+        
+        const [metricas] = await pool.execute(query, valores);
         const resultado = metricas[0];
         
         console.log('✅ [PLANTA MODEL] Métricas obtenidas:', resultado);
@@ -421,11 +424,6 @@ static async obtenerPlantasConEstados(filtros = {}) {
                 p.id,
                 p.nombre,
                 p.ubicacion,
-                p.clienteId,
-                p.tecnicoId,
-                u.nombre as clienteNombre,
-                ut.nombre as tecnicoNombre,
-              
                 COUNT(DISTINCT i.id) as totalIncidencias,
                 COUNT(DISTINCT CASE WHEN i.estado = 'resuelto' THEN i.id END) as incidenciasResueltas,
                 COUNT(DISTINCT CASE WHEN i.estado = 'pendiente' THEN i.id END) as incidenciasPendientes,
@@ -439,12 +437,10 @@ static async obtenerPlantasConEstados(filtros = {}) {
                     ELSE 'optimal'
                 END as estado
             FROM plants p
-            LEFT JOIN users u ON p.clienteId = u.id
-            LEFT JOIN users ut ON p.tecnicoId = ut.id
             LEFT JOIN incidencias i ON p.id = i.plantId
             LEFT JOIN mantenimientos m ON p.id = m.plantId AND m.estado = 'pendiente'
             ${whereClause}
-            GROUP BY p.id, p.nombre, p.ubicacion, p.clienteId, p.tecnicoId, u.nombre, ut.nombre
+            GROUP BY p.id, p.nombre, p.ubicacion
             ORDER BY p.nombre
         `;
 
@@ -467,10 +463,6 @@ static async obtenerPlantasConEstados(filtros = {}) {
                 id: planta.id,
                 nombre: planta.nombre,
                 ubicacion: planta.ubicacion,
-                clienteId: planta.clienteId,
-                tecnicoId: planta.tecnicoId,
-                clienteNombre: planta.clienteNombre,
-                tecnicoNombre: planta.tecnicoNombre,
                 tasaResolucion: tasaResolucion,
                 estados: {
                     planta: planta.estado,
