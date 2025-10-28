@@ -338,7 +338,6 @@ static async obtenerPorTecnico(tecnicoId) {
     /////////////////////////// nuevos metodos
 
 
-
 static async obtenerMetricasConsolidadas(filtros = {}) {
     try {
         console.log('📊 [PLANTA MODEL] Obteniendo métricas - Filtros:', filtros);
@@ -353,6 +352,7 @@ static async obtenerMetricasConsolidadas(filtros = {}) {
             valores.push(...filtros.plantaIds);
         }
         
+        // ✅ CORREGIDO: Query sin referencia a 'p.id' en subconsultas
         const [metricas] = await pool.execute(`
             SELECT 
                 COUNT(*) as totalPlantas,
