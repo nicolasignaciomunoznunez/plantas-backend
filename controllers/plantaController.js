@@ -540,3 +540,43 @@ export const obtenerPlantasDashboard = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+export const obtenerPlantaCompleta = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('🔍 [PLANTA CONTROLLER] Obteniendo planta completa ID:', id);
+
+    // ✅ VERIFICAR ACCESO
+    const tieneAcceso = await Usuario.tieneAccesoAPlanta(req.usuarioId, id);
+    
+    if (!tieneAcceso && req.usuario.rol !== 'superadmin') {
+      return res.status(403).json({
+        success: false,
+        message: "No tienes acceso a esta planta"
+      });
+    }
+
+    const plantaCompleta = await Planta.obtenerPlantasCompletas(id);
+
+    if (!plantaCompleta) {
+      return res.status(404).json({
+        success: false,
+        message: "Planta no encontrada"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      planta: plantaCompleta
+    });
+
+  } catch (error) {
+    console.log("❌ [PLANTA CONTROLLER] Error obteniendo planta completa:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
