@@ -46,7 +46,7 @@ export class Planta {
         }
     }
 
-static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
+    static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
     try {
         const limiteNum = Number(limite);
         const paginaNum = Number(pagina);
@@ -70,22 +70,19 @@ static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
         
         console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
         
-        // ✅ CORREGIDO: AGREGAR placeholders para LIMIT y OFFSET
+        // ✅ SOLUCIÓN: Usar valores directos para LIMIT y OFFSET
         const query = `
             SELECT p.*
             FROM plants p 
             ${whereClause}
             ORDER BY p.nombre 
-            LIMIT ? OFFSET ?
+            LIMIT ${limiteNum} OFFSET ${offset}
         `;
         
-        // ✅ CORREGIDO: Agregar límite y offset a los valores
-        const valoresFinal = [...valores, limiteNum, offset];
-        
         console.log('🔍 [PLANTA MODEL] Query final:', query);
-        console.log('🔍 [PLANTA MODEL] Valores finales:', valoresFinal);
+        console.log('🔍 [PLANTA MODEL] Valores:', valores);
         
-        const [plantas] = await pool.execute(query, valoresFinal);
+        const [plantas] = await pool.execute(query, valores);
         
         console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
         return plantas.map(planta => new Planta(planta));
