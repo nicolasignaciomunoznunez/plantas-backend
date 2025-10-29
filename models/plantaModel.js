@@ -46,56 +46,55 @@ export class Planta {
         }
     }
 
-    // Obtener todas las plantas (SIN joins de cliente/tecnico)
-    static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
-        try {
-            const limiteNum = Number(limite);
-            const paginaNum = Number(pagina);
-            
-            if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
-                throw new Error('Parámetros de paginación inválidos');
-            }
-            
-            const offset = (paginaNum - 1) * limiteNum;
-            
-            let whereClause = 'WHERE 1=1';
-            const valores = [];
-            
-            // ✅ CORREGIDO: Usar filtros.plantaIds del middleware
-            if (filtros.plantaIds && filtros.plantaIds.length > 0) {
-                const placeholders = filtros.plantaIds.map(() => '?').join(',');
-                whereClause += ` AND p.id IN (${placeholders})`;
-                valores.push(...filtros.plantaIds);
-                console.log('🔍 [PLANTA MODEL] Filtro por plantaIds:', filtros.plantaIds);
-            }
-            
-            // ❌ ELIMINAR: Filtros por tecnicoId y clienteId (ya no existen)
-            
-            console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
-            
-            const query = `
-                SELECT p.*
-                FROM plants p 
-                ${whereClause}
-                ORDER BY p.nombre 
-                LIMIT ? OFFSET ?
-            `;
-            
-            valores.push(limiteNum, offset);
-            
-            console.log('🔍 [PLANTA MODEL] Query final:', query);
-            console.log('🔍 [PLANTA MODEL] Valores:', valores);
-            
-            const [plantas] = await pool.execute(query, valores);
-            
-            console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
-            return plantas.map(planta => new Planta(planta));
-            
-        } catch (error) {
-            console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
-            throw new Error(`Error al obtener plantas: ${error.message}`);
+static async obtenerTodas(limite = 10, pagina = 1, filtros = {}) {
+    try {
+        const limiteNum = Number(limite);
+        const paginaNum = Number(pagina);
+        
+        if (isNaN(limiteNum) || isNaN(paginaNum) || limiteNum < 1 || paginaNum < 1) {
+            throw new Error('Parámetros de paginación inválidos');
         }
+        
+        const offset = (paginaNum - 1) * limiteNum;
+        
+        let whereClause = 'WHERE 1=1';
+        const valores = [];
+        
+        // ✅ CORREGIDO: Usar filtros.plantaIds del middleware
+        if (filtros.plantaIds && filtros.plantaIds.length > 0) {
+            const placeholders = filtros.plantaIds.map(() => '?').join(',');
+            whereClause += ` AND p.id IN (${placeholders})`;
+            valores.push(...filtros.plantaIds);
+            console.log('🔍 [PLANTA MODEL] Filtro por plantaIds:', filtros.plantaIds);
+        }
+        
+        console.log('🔍 [PLANTA MODEL] Query con filtros:', { whereClause, valores });
+        
+        // ✅ CORREGIDO: AGREGAR placeholders para LIMIT y OFFSET
+        const query = `
+            SELECT p.*
+            FROM plants p 
+            ${whereClause}
+            ORDER BY p.nombre 
+            LIMIT ? OFFSET ?
+        `;
+        
+        // ✅ CORREGIDO: Agregar límite y offset a los valores
+        const valoresFinal = [...valores, limiteNum, offset];
+        
+        console.log('🔍 [PLANTA MODEL] Query final:', query);
+        console.log('🔍 [PLANTA MODEL] Valores finales:', valoresFinal);
+        
+        const [plantas] = await pool.execute(query, valoresFinal);
+        
+        console.log('✅ [PLANTA MODEL] Plantas encontradas:', plantas.length);
+        return plantas.map(planta => new Planta(planta));
+        
+    } catch (error) {
+        console.error('❌ [PLANTA MODEL] Error en obtenerTodas:', error);
+        throw new Error(`Error al obtener plantas: ${error.message}`);
     }
+}
 
     // Obtener plantas por cliente (sistema muchos-a-muchos)
     static async obtenerPorCliente(clienteId) {
