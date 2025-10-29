@@ -21,42 +21,182 @@ const REPORTS_DIR = path.join(__dirname, '../../uploads/reports');
 
 export const crearMantenimiento = async (req, res) => {
     try {
-        const { plantId, tipo, descripcion, fechaProgramada, estado } = req.body;
+        const { plantId, tipo, descripcion, fechaProgramada, estado, checklistItems } = req.body;
         const userId = req.usuarioId;
 
         console.log('📥 Datos recibidos para crear mantenimiento:', {
-            plantId, tipo, descripcion, fechaProgramada, estado, userId
+            plantId, tipo, descripcion, fechaProgramada, estado, userId, checklistItems
         });
 
-        if (!plantId || !descripcion || !fechaProgramada) {
+        // ✅ VALIDACIONES MEJORADAS BASADAS EN TU ESQUEMA
+        if (!plantId || isNaN(plantId)) {
             return res.status(400).json({
                 success: false,
-                message: "plantId, descripción y fechaProgramada son requeridos"
+                message: "ID de planta válido es requerido"
             });
         }
 
-        const nuevoMantenimiento = await Mantenimiento.crear({
-            plantId,
-            userId,
-            tipo,
-            descripcion,
-            fechaProgramada,
-            estado
+        if (!descripcion || descripcion.trim().length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "La descripción del mantenimiento es requerida"
+            });
+        }
+
+        if (descripcion.trim().length < 10) {
+            return res.status(400).json({
+                success: false,
+                message: "La descripción debe tener al menos 10 caracteres"
+            });
+        }
+
+        if (!fechaProgramada) {
+            return res.status(400).json({
+                success: false,
+                message: "La fecha programada es requerida"
+            });
+        }
+
+        // Validar formato de fecha (YYYY-MM-DD)
+        const fechaProgramadaObj = new Date(fechaProgramada);
+        if (isNaN(fechaProgramadaObj.getTime())) {
+            return res.status(400).json({
+                success: false,
+                message: "Formato de fecha inválido. Use YYYY-MM-DD"
+            });
+        }
+
+        // Validar que la fecha no sea en el pasado (solo fecha, sin hora)
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        fechaProgramadaObj.setHours(0, 0, 0, 0);
+        
+        if (fechaProgramadaObj < hoy) {
+            return res.status(400).json({
+                success: false,
+                message: "La fecha programada no puede ser en el pasado"
+            });
+        }
+
+        // Validar tipo de mantenimiento (según tu ENUM)
+        if (tipo && !['preventivo', 'correctivo'].includes(tipo)) {
+            return res.status(400).json({
+                success: false,
+                message: "Tipo de mantenimiento debe ser 'preventivo' o 'correctivo'"
+            });
+        }
+
+        // Validar estado (según tu ENUM)
+        if (estado && !['pendiente', 'en_progreso', 'completado'].includes(estado)) {
+            return res.status(400).json({
+                success: false,
+                message: "Estado debe ser 'pendiente', 'en_progreso' o 'completado'"
+            });
+        }
+
+        // Validar checklistItems si se proporciona
+        if (checklistItems && !Array.isArray(checklistItems)) {
+            return res.status(400).json({
+                success: false,
+                message: "checklistItems debe ser un array"
+            });
+        }
+
+        console.log('✅ Validaciones pasadas - Creando mantenimiento...');
+
+        // ✅ CREAR MANTENIMIENTO CON VALORES POR DEFECTO DEL ESQUEMA
+        const datosMantenimiento = {
+            plantId: parseInt(plantId),
+            userId: parseInt(userId),
+            tipo: tipo || 'preventivo', // Valor por defecto según tu schema
+            descripcion: descripcion.trim(),
+            fechaProgramada: fechaProgramada, // Ya validado como Date
+            estado: estado || 'pendiente' // Valor por defecto según tu schema
+        };
+
+        console.log('🔧 Datos para crear mantenimiento:', datosMantenimiento);
+
+        const nuevoMantenimiento = await Mantenimiento.crear(datosMantenimiento);
+
+        // ✅ AGREGAR ITEMS DEL CHECKLIST SI SE PROPORCIONAN
+        let itemsChecklistAgregados = 0;
+        if (checklistItems && checklistItems.length > 0) {
+            console.log(`📋 Agregando ${checklistItems.length} items al checklist...`);
+            
+            for (const item of checklistItems) {
+                if (item && item.trim() && item.trim().length > 0) {
+                    await Mantenimiento.agregarItemChecklist(nuevoMantenimiento.id, item.trim());
+                    itemsChecklistAgregados++;
+                }
+            }
+            
+            console.log(`✅ ${itemsChecklistAgregados} items agregados al checklist`);
+            
+            // Recargar el mantenimiento con el checklist actualizado
+            const mantenimientoActualizado = await Mantenimiento.buscarPorId(nuevoMantenimiento.id);
+            nuevoMantenimiento.checklist = mantenimientoActualizado.checklist;
+        }
+
+        console.log('✅ Mantenimiento creado exitosamente:', {
+            id: nuevoMantenimiento.id,
+            plantId: nuevoMantenimiento.plantId,
+            tipo: nuevoMantenimiento.tipo,
+            estado: nuevoMantenimiento.estado,
+            itemsChecklist: itemsChecklistAgregados
         });
 
-        // ✅ NO procesar fotos aquí - se suben por separado
-        console.log('✅ Mantenimiento creado - ID:', nuevoMantenimiento.id);
+        // ✅ CONSTRUIR MENSAJE SEGÚN LO CREADO
+        let mensaje = "Mantenimiento programado correctamente";
+        if (itemsChecklistAgregados > 0) {
+            mensaje += ` con ${itemsChecklistAgregados} items en el checklist`;
+        }
 
         res.status(201).json({
             success: true,
-            message: "Mantenimiento programado correctamente",
-            mantenimiento: nuevoMantenimiento
+            message: mensaje,
+            mantenimiento: nuevoMantenimiento,
+            detalles: {
+                checklistCreado: itemsChecklistAgregados > 0,
+                totalItemsChecklist: itemsChecklistAgregados,
+                proximosPasos: [
+                    "Usa el endpoint de iniciar mantenimiento cuando comiences el trabajo",
+                    "Puedes agregar fotos 'antes' al iniciar el mantenimiento", 
+                    "Registra materiales utilizados durante la ejecución",
+                    "Completa el checklist marcando items como realizados"
+                ]
+            }
         });
+
     } catch (error) {
-        console.log("Error al crear mantenimiento:", error);
+        console.log("❌ Error al crear mantenimiento:", error);
+        
+        // ✅ MANEJAR ERRORES ESPECÍFICOS DE BASE DE DATOS
+        if (error.message.includes('foreign key constraint')) {
+            if (error.message.includes('plantId')) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Error: La planta especificada no existe"
+                });
+            }
+            if (error.message.includes('userId')) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Error: El usuario técnico especificado no existe"
+                });
+            }
+        }
+
+        if (error.message.includes('Data too long')) {
+            return res.status(400).json({
+                success: false,
+                message: "Error: La descripción es demasiado larga"
+            });
+        }
+
+        // ✅ ERROR GENÉRICO
         res.status(500).json({
             success: false,
-            message: error.message
+            message: `Error al crear mantenimiento: ${error.message}`
         });
     }
 };
@@ -246,22 +386,32 @@ export const eliminarMantenimiento = async (req, res) => {
 
 export const obtenerMantenimientos = async (req, res) => {
     try {
-        const { limite = 50, pagina = 1 } = req.query;
+        const { limite = 50, pagina = 1, estado, tipo, plantaId } = req.query;
+        const { filtrosMantenimiento = {} } = req; // Del middleware
         
         const offset = (pagina - 1) * limite;
         
-        // Obtener todos los mantenimientos con paginación
-        const mantenimientos = await Mantenimiento.obtenerTodos({
+        // ✅ COMBINAR FILTROS: query params + middleware
+        const filtrosCombinados = {
+            ...filtrosMantenimiento,
+            ...(estado && { estado }),
+            ...(tipo && { tipo }),
+            ...(plantaId && { plantaIds: [plantaId] })
+        };
+
+        const resultado = await Mantenimiento.obtenerTodos({
             limite: parseInt(limite),
-            offset: parseInt(offset)
+            offset: parseInt(offset),
+            filtros: filtrosCombinados
         });
 
         res.status(200).json({
             success: true,
-            mantenimientos: mantenimientos.rows || mantenimientos,
-            total: mantenimientos.count || mantenimientos.length,
+            mantenimientos: resultado.rows,
+            total: resultado.count,
             pagina: parseInt(pagina),
-            totalPaginas: Math.ceil((mantenimientos.count || mantenimientos.length) / limite)
+            totalPaginas: Math.ceil(resultado.count / limite),
+            filtrosAplicados: filtrosCombinados // Para debug
         });
     } catch (error) {
         console.log("Error al obtener mantenimientos:", error);
@@ -276,7 +426,8 @@ export const obtenerMantenimientos = async (req, res) => {
 // Agregar método optimizado para dashboard
 export const obtenerMantenimientosResumen = async (req, res) => {
   try {
-    const resumen = await Mantenimiento.obtenerResumenDashboard();
+    const { filtrosMantenimiento = {} } = req; // ✅ Agregar esto
+    const resumen = await Mantenimiento.obtenerResumenDashboard(filtrosMantenimiento);
     res.json({ success: true, ...resumen });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
