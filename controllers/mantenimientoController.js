@@ -387,17 +387,48 @@ export const eliminarMantenimiento = async (req, res) => {
 export const obtenerMantenimientos = async (req, res) => {
     try {
         const { limite = 50, pagina = 1, estado, tipo, plantaId } = req.query;
-        const { filtrosMantenimiento = {} } = req; // Del middleware
         
+        console.log('🔒 [SEGURIDAD] === VERIFICANDO PERMISOS ===');
+        console.log('🔒 [SEGURIDAD] Usuario:', req.usuario?.email);
+        console.log('🔒 [SEGURIDAD] Rol:', req.usuario?.rol);
+        console.log('🔒 [SEGURIDAD] UserID:', req.usuarioId);
+
+        // ✅ OBTENER PLANTAS PERMITIDAS SEGÚN ROL
+        let plantaIds = [];
+        
+        if (req.usuario.rol === 'tecnico') {
+            const { Planta } = await import('../models/plantaModel.js');
+            const plantasTecnico = await Planta.obtenerPorTecnico(req.usuarioId);
+            plantaIds = plantasTecnico.map(p => p.id);
+            console.log('🔒 [SEGURIDAD] Técnico - Plantas asignadas:', plantaIds);
+            
+        } else if (req.usuario.rol === 'cliente') {
+            const { Planta } = await import('../models/plantaModel.js');
+            const plantasCliente = await Planta.obtenerPorCliente(req.usuarioId);
+            plantaIds = plantasCliente.map(p => p.id);
+            console.log('🔒 [SEGURIDAD] Cliente - Sus plantas:', plantaIds);
+            
+        } else if (req.usuario.rol === 'superadmin') {
+            console.log('🔒 [SEGURIDAD] Superadmin - Acceso total');
+            // No aplicar filtros para superadmin
+        }
+
+        // ✅ FILTROS DE SEGURIDAD OBLIGATORIOS
+        const filtrosSeguridad = {};
+        if (req.usuario.rol !== 'superadmin' && plantaIds.length > 0) {
+            filtrosSeguridad.plantaIds = plantaIds;
+        }
+
         const offset = (pagina - 1) * limite;
         
-        // ✅ COMBINAR FILTROS: query params + middleware
         const filtrosCombinados = {
-            ...filtrosMantenimiento,
+            ...filtrosSeguridad,
             ...(estado && { estado }),
             ...(tipo && { tipo }),
             ...(plantaId && { plantaIds: [plantaId] })
         };
+
+        console.log('🔒 [SEGURIDAD] Filtros finales aplicados:', filtrosCombinados);
 
         const resultado = await Mantenimiento.obtenerTodos({
             limite: parseInt(limite),
@@ -405,16 +436,24 @@ export const obtenerMantenimientos = async (req, res) => {
             filtros: filtrosCombinados
         });
 
+        console.log('🔒 [SEGURIDAD] Total mantenimientos mostrados:', resultado.rows.length);
+
         res.status(200).json({
             success: true,
             mantenimientos: resultado.rows,
             total: resultado.count,
             pagina: parseInt(pagina),
             totalPaginas: Math.ceil(resultado.count / limite),
-            filtrosAplicados: filtrosCombinados // Para debug
+            seguridad: {
+                usuario: req.usuario?.email,
+                rol: req.usuario?.rol,
+                plantasPermitidas: plantaIds,
+                totalMantenimientosAccesibles: resultado.count
+            }
         });
+
     } catch (error) {
-        console.log("Error al obtener mantenimientos:", error);
+        console.log("❌ Error al obtener mantenimientos:", error);
         res.status(500).json({
             success: false,
             message: error.message
