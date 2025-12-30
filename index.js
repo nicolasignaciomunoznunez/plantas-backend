@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import dotenv from "dotenv";  // <-- AÑADIDO: Importar dotenv
+dotenv.config();              // <-- AÑADIDO: Cargar variables de entorno
 
 import { testConnection } from "./db/connectDB.js";
 import { verifyEmailConnection } from "./config/emailConfig.js";
