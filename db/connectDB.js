@@ -1,13 +1,12 @@
-// db/connectDB.js - VERSIÓN FINAL RAILWAY
+
 import mysql from 'mysql2/promise';
 
-// Configuración para MySQL de Railway
 const dbConfig = {
     host: process.env.MYSQLHOST || 'localhost',
     port: parseInt(process.env.MYSQLPORT || '3306'),
     user: process.env.MYSQLUSER || 'root',
     password: process.env.MYSQLPASSWORD || '',
-    database: process.env.MYSQLDATABASE || 'railway',
+    database: process.env.MYSQLDATABASE || 'infraexpert_db',
     charset: 'utf8mb4',
     waitForConnections: true,
     connectionLimit: 10,
@@ -25,13 +24,13 @@ export const testConnection = async () => {
     let connection;
     try {
         connection = await pool.getConnection();
-        console.log('🎉 ¡CONEXIÓN RAILWAY MYSQL EXITOSA!');
+        console.log('🎉 ¡CONEXIÓN  MYSQL EXITOSA!');
         
         // Verificar tablas
         const [tables] = await connection.execute(`
             SELECT TABLE_NAME 
             FROM information_schema.tables 
-            WHERE TABLE_SCHEMA = 'railway'
+            WHERE TABLE_SCHEMA = 'infraexpert_db'
         `);
         
         console.log('📊 Tablas migradas:', tables.length);
