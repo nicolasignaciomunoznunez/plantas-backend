@@ -1,15 +1,27 @@
-// services/sendgridService.js - VERSIÓN FINAL CON TUS PLANTILLAS
-import sgMail from '@sendgrid/mail';
+// services/emailService.js - VERSIÓN PARA BREVO (Mantiene tus plantillas)
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Configurar API Key con variables de entorno
-if (process.env.EMAIL_APP_PASSWORD) {
-  sgMail.setApiKey(process.env.EMAIL_APP_PASSWORD);
-  console.log('✅ SENDGRID: API Key configurada desde variables de entorno');
-} else {
-  console.error('❌ SENDGRID: EMAIL_APP_PASSWORD no configurado');
-}
+// Configurar transporte con BREVO
+const createTransporter = () => {
+  console.log('📧 [EMAIL] Configurando transporte para:', process.env.EMAIL_SERVICE || 'brevo');
+  
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
+    port: parseInt(process.env.EMAIL_PORT) || 587,
+    secure: false,
+    auth: {
+      user: process.env.EMAIL_USER || '950289002@smtp-brevo.com',
+      pass: process.env.EMAIL_APP_PASSWORD
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+};
 
-// TUS PLANTILLAS ORIGINALES COMPLETAS
+// TUS PLANTILLAS ORIGINALES (MISMO CÓDIGO - NO CAMBIES)
 const EMAIL_TEMPLATES = {
   verification: (verificationCode, userName = '') => `
 <!DOCTYPE html>
@@ -145,34 +157,36 @@ const EMAIL_TEMPLATES = {
   `
 };
 
-export class SendGridService {
+export class EmailService {
   static async sendEmail(to, subject, html, text = '') {
     try {
-      console.log('📧 [SENDGRID] Enviando email a:', to);
+      console.log('📧 [BREVO] Enviando email a:', to);
       
-      const msg = {
-        to,
+      const transporter = createTransporter();
+      
+      const mailOptions = {
         from: {
-          name: process.env.EMAIL_FROM_NAME || 'R&V SPA',
-          email: process.env.EMAIL_FROM_ADDRESS
+          name: process.env.EMAIL_FROM_NAME || 'Infraexpert',
+          address: process.env.EMAIL_FROM_ADDRESS
         },
-        subject,
+        to: to,
+        subject: subject,
         text: text || this.htmlToText(html),
-        html
+        html: html
       };
 
-      const result = await sgMail.send(msg);
+      const info = await transporter.sendMail(mailOptions);
       
-      console.log('✅ [SENDGRID] Email enviado exitosamente');
-      console.log('   ID:', result[0]?.headers?.['x-message-id']);
+      console.log('✅ [BREVO] Email enviado exitosamente');
+      console.log('   ID:', info.messageId);
       
       return { 
         success: true, 
-        messageId: result[0]?.headers?.['x-message-id'],
-        response: result[0] 
+        messageId: info.messageId,
+        response: info.response 
       };
     } catch (error) {
-      console.error('❌ [SENDGRID] ERROR ENVIANDO EMAIL:');
+      console.error('❌ [BREVO] ERROR ENVIANDO EMAIL:');
       console.error('   Para:', to);
       console.error('   Error:', error.message);
       
@@ -184,50 +198,63 @@ export class SendGridService {
     }
   }
 
-  // Email de verificación
+  // Email de verificación (MANTIENE MISMA FUNCIÓN)
   static async sendVerificationEmail(email, verificationCode, userName = '') {
-    const subject = 'Verifica tu email - R&V SPA';
+    const subject = 'Verifica tu email - Infraexpert';
     const html = EMAIL_TEMPLATES.verification(verificationCode, userName);
     const text = `Tu código de verificación es: ${verificationCode}. Insértalo en la página de verificación.`;
 
     return await this.sendEmail(email, subject, html, text);
   }
 
-  // Email de bienvenida
+  // Email de bienvenida (MANTIENE MISMA FUNCIÓN)
   static async sendWelcomeEmail(email, userName) {
-    const subject = '¡Bienvenido a R&V SPA!';
+    const subject = '¡Bienvenido a Infraexpert!';
     const html = EMAIL_TEMPLATES.welcome(userName);
     const text = `¡Bienvenido ${userName}! Tu cuenta ha sido verificada exitosamente.`;
 
     return await this.sendEmail(email, subject, html, text);
   }
 
-  // Email de restablecimiento de contraseña
+  // Email de restablecimiento de contraseña (MANTIENE MISMA FUNCIÓN)
   static async sendPasswordResetEmail(email, resetToken, userName = '') {
     const resetUrl = `${process.env.CLIENT_URL}/restablecer-contraseña/${resetToken}`;
-    const subject = 'Cambia tu contraseña - R&V SPA';
+    const subject = 'Cambia tu contraseña - Infraexpert';
     const html = EMAIL_TEMPLATES.passwordResetRequest(resetUrl, userName);
     const text = `Para restablecer tu contraseña, visita: ${resetUrl}`;
 
     return await this.sendEmail(email, subject, html, text);
   }
 
-  // Email de confirmación de contraseña restablecida
+  // Email de confirmación de contraseña restablecida (MANTIENE MISMA FUNCIÓN)
   static async sendPasswordResetConfirmation(email, userName = '') {
-    const subject = 'Contraseña restablecida - R&V SPA';
+    const subject = 'Contraseña restablecida - Infraexpert';
     const html = EMAIL_TEMPLATES.passwordResetSuccess(userName);
     const text = 'Tu contraseña ha sido restablecida exitosamente.';
 
     return await this.sendEmail(email, subject, html, text);
   }
 
-  // Utilidad para convertir HTML a texto plano
+  // Utilidad para convertir HTML a texto plano (MISMA FUNCIÓN)
   static htmlToText(html) {
     return html
       .replace(/<[^>]*>/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   }
+
+  // Nueva función para probar conexión
+  static async testConnection() {
+    try {
+      const transporter = createTransporter();
+      await transporter.verify();
+      console.log('✅ [BREVO] Conexión SMTP verificada');
+      return true;
+    } catch (error) {
+      console.error('❌ [BREVO] Error verificando conexión:', error.message);
+      return false;
+    }
+  }
 }
 
-export default SendGridService;
+export default EmailService;
