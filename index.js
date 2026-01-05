@@ -45,29 +45,37 @@ console.log('🚀 ==========================================');
 
 // ==================== CONFIGURACIÓN CORS PARA PRODUCCIÓN ====================
 const allowedOrigins = [
-  'https://infraexpert.vercel.app',  // Frontend en Vercel
-  'https://infraexpert.cl',           // Dominio personalizado
-  'http://localhost:3000',            // Desarrollo local
-  process.env.CLIENT_URL              // Variable de entorno
-].filter(Boolean);  // Remueve valores undefined/null
+  // Dominios de producción
+  'https://www.infraexpert.cl',
+  'https://plantas-frontend-xly86glqe.vercel.app',
+  'https://plantas-frontend.vercel.app',
+  
+  // Dominios de desarrollo
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:8080',
+  
+  // Subdominio API (si necesitas acceso directo)
+  'https://api.infraexpert.cl'
+];
+
+console.log('🔒 Dominios permitidos por CORS:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permite requests sin origen (como mobile apps o curl)
+    // Permitir requests sin origen
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log(`⚠️  Origen bloqueado por CORS: ${origin}`);
+      console.log(`⚠️  Origen bloqueado: ${origin}`);
+      console.log(`📋 Permitidos: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
-  optionsSuccessStatus: 200,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range']
+  optionsSuccessStatus: 200
 };
 
 app.use(cors(corsOptions));
