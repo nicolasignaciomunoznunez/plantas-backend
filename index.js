@@ -7,9 +7,12 @@ import rateLimit from "express-rate-limit";
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import dotenv from "dotenv";  // <-- AÑADIDO: Importar dotenv
-dotenv.config();              // <-- AÑADIDO: Cargar variables de entorno
+import dotenv from "dotenv";
 
+// Cargar variables de entorno PRIMERO
+dotenv.config();
+
+// Importar después de dotenv.config()
 import { testConnection } from "./db/connectDB.js";
 import { verifyEmailConnection } from "./config/emailConfig.js";
 
@@ -29,72 +32,127 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // 🔧 DIAGNÓSTICO MEJORADO - AL INICIO
-console.log('🔧 [EMAIL ENV DEBUG] === VERIFICANDO VARIABLES DE EMAIL ===');
-const emailVars = [
-  'EMAIL_SERVICE',
-  'EMAIL_USER', 
-  'EMAIL_APP_PASSWORD',
-  'EMAIL_FROM_NAME',
-  'EMAIL_FROM_ADDRESS'
-];
+console.log('🚀 ==========================================');
+console.log('🚀 INFRAEXPERT API - PRODUCCIÓN');
+console.log('🚀 ==========================================');
+console.log('📋 CONFIGURACIÓN CARGADA:');
+console.log(`   PORT: ${PORT}`);
+console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`   CLIENT_URL: ${process.env.CLIENT_URL}`);
+console.log(`   DB: ${process.env.MYSQLUSER}@${process.env.MYSQLHOST}`);
+console.log(`   DATABASE: ${process.env.MYSQLDATABASE}`);
+console.log('🚀 ==========================================');
 
-emailVars.forEach(key => {
-  const value = process.env[key];
-  if (value) {
-    if (key.includes('PASSWORD')) {
-      console.log(`   ✅ ${key}: ✅ PRESENTE (${value.length} caracteres)`);
-      console.log(`      Inicia con SG.: ${value.startsWith('SG.') ? '✅ SÍ' : '❌ NO'}`);
+// ==================== CONFIGURACIÓN CORS PARA PRODUCCIÓN ====================
+const allowedOrigins = [
+  'https://infraexpert.vercel.app',  // Frontend en Vercel
+  'https://infraexpert.cl',           // Dominio personalizado
+  'http://localhost:3000',            // Desarrollo local
+  process.env.CLIENT_URL              // Variable de entorno
+].filter(Boolean);  // Remueve valores undefined/null
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Permite requests sin origen (como mobile apps o curl)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
     } else {
-      console.log(`   ✅ ${key}: ${value}`);
+      console.log(`⚠️  Origen bloqueado por CORS: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
     }
-  } else {
-    console.log(`   ❌ ${key}: UNDEFINED`);
-  }
-});
-console.log('==========================================');
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range']
+};
 
-console.log('🚀 INICIANDO EN PUERTO:', PORT);
+app.use(cors(corsOptions));
 
-// CORS permisivo
-app.use(cors({ origin: true, credentials: true }));
-
-// Middlewares
-app.use(helmet({ 
+// ==================== MIDDLEWARES DE SEGURIDAD ====================
+app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  // ✅ CONFIGURACIÓN PARA PERMITIR ARCHIVOS ESTÁTICOS
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-    },
+      styleSrc: ["'self'", "'unsafe-inline'", "https:"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      fontSrc: ["'self'", "https:", "data:"],
+      connectSrc: [
+        "'self'", 
+        "https://infraexpert.cl", 
+        "https://infraexpert.vercel.app",
+        "wss:"
+      ],
+      frameSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      formAction: ["'self'"]
+    }
+  },
+  hsts: {
+    maxAge: 31536000, // 1 año
+    includeSubDomains: true,
+    preload: true
   }
 }));
+
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
-// ✅ SERVIR ARCHIVOS ESTÁTICOS (FOTOS SUBIDAS)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// ==================== RATE LIMITING ====================
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Límites diferentes
+  message: { 
+    success: false, 
+    message: 'Demasiadas solicitudes desde esta IP, por favor intente después de 15 minutos' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
-// Rate limiting
-app.use('/api/', rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 500,
-  message: { success: false, message: 'Demasiadas solicitudes' }
-}));
+// Aplicar rate limiting solo a rutas API
+app.use('/api/', apiLimiter);
 
-// Trust proxy
-app.set('trust proxy', 1);
+// ==================== TRUST PROXY (IMPORTANTE PARA NGINX) ====================
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 
-// Logging
+// ==================== LOGGING ====================
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path}`);
+  console.log(`📨 ${req.method} ${req.path} - IP: ${req.ip} - Origin: ${req.headers.origin}`);
   next();
 });
 
-// Rutas
+// ==================== SERVIR ARCHIVOS ESTÁTICOS ====================
+// Configurar múltiples directorios de uploads
+const staticDirs = [
+  { route: '/uploads', path: path.join(__dirname, 'uploads') },
+  { route: '/uploads/incidencias', path: path.join(__dirname, 'uploads/incidencias') },
+  { route: '/uploads/mantenimientos', path: path.join(__dirname, 'uploads/mantenimientos') },
+  { route: '/uploads/usuarios', path: path.join(__dirname, 'uploads/usuarios') }
+];
+
+staticDirs.forEach(({ route, path: dirPath }) => {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log(`📁 Directorio creado: ${dirPath}`);
+  }
+  app.use(route, express.static(dirPath, {
+    maxAge: '30d',
+    setHeaders: (res, path) => {
+      res.set('Cache-Control', 'public, max-age=2592000'); // 30 días
+    }
+  }));
+});
+
+// ==================== RUTAS DE LA API ====================
 app.use("/api/auth", authRoutes);
 app.use("/api/plantas", plantaRoutes);
 app.use("/api/datos-planta", datoPlantaRoutes);
@@ -103,173 +161,153 @@ app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
-// ✅ NUEVO: RUTA PARA VERIFICAR ARCHIVOS SUBIDOS
-app.get("/api/uploads/check", (req, res) => {
-  const uploadsDir = path.join(__dirname, 'uploads');
-  const incidenciasDir = path.join(__dirname, 'uploads/incidencias');
-  
+// ==================== RUTAS DE DIAGNÓSTICO ====================
+
+// Health check mejorado
+app.get("/api/health", async (req, res) => {
   try {
-    const stats = {
-      uploadsExists: fs.existsSync(uploadsDir),
-      incidenciasExists: fs.existsSync(incidenciasDir),
-      uploadsPath: uploadsDir,
-      incidenciasPath: incidenciasDir
-    };
-    
+    const dbStatus = await testConnection();
     res.json({
       success: true,
-      message: "Estado de directorios de uploads",
-      ...stats
+      message: "✅ API funcionando correctamente",
+      status: "healthy",
+      timestamp: new Date().toISOString(),
+      server: {
+        environment: process.env.NODE_ENV,
+        port: PORT,
+        uptime: process.uptime(),
+        nodeVersion: process.version
+      },
+      database: {
+        connected: dbStatus ? true : false,
+        status: dbStatus ? "connected" : "disconnected"
+      },
+      services: {
+        email: !!process.env.EMAIL_APP_PASSWORD,
+        uploads: true,
+        cors: allowedOrigins
+      }
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Error verificando directorios",
+      message: "❌ Error en health check",
       error: error.message
     });
   }
 });
 
-// ✅ RUTA DE TEST EMAIL MEJORADA
-app.post("/api/test-sendgrid-api", async (req, res) => {
-  try {
-    console.log('🧪 [SENDGRID API TEST] Iniciando...');
-    
-    // Verificar configuración antes de importar
-    console.log('🔧 [TEST] Configuración actual:');
-    console.log('   EMAIL_APP_PASSWORD:', process.env.EMAIL_APP_PASSWORD ? `✅ (${process.env.EMAIL_APP_PASSWORD.length} chars)` : '❌ Faltante');
-    console.log('   EMAIL_FROM_ADDRESS:', process.env.EMAIL_FROM_ADDRESS || '❌ Faltante');
-    console.log('   EMAIL_FROM_NAME:', process.env.EMAIL_FROM_NAME || '❌ Faltante');
-    
-    if (!process.env.EMAIL_APP_PASSWORD || !process.env.EMAIL_FROM_ADDRESS) {
-      return res.status(500).json({
-        success: false,
-        error: 'Configuración de email incompleta',
-        missing: {
-          EMAIL_APP_PASSWORD: !process.env.EMAIL_APP_PASSWORD,
-          EMAIL_FROM_ADDRESS: !process.env.EMAIL_FROM_ADDRESS
-        }
-      });
-    }
-    
-    const { SendGridService } = await import('./services/sendgridService.js');
-    
-    const result = await SendGridService.sendVerificationEmail(
-      process.env.EMAIL_FROM_ADDRESS, // Enviar a ti mismo
-      '123456', 
-      'Test User'
-    );
-    
-    console.log('🧪 Resultado:', result);
-    
-    res.json({
-      success: result.success,
-      message: result.success ? '✅ Email enviado via SendGrid API' : '❌ Error',
-      result: result
-    });
-    
-  } catch (error) {
-    console.error('🧪 ERROR:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      stack: process.env.NODE_ENV === 'production' ? undefined : error.stack
-    });
-  }
-});
-
-// ✅ NUEVO: ENDPOINT DE CONFIGURACIÓN DE EMAIL COMPLETA
-app.get("/api/email-config", (req, res) => {
-  const config = {
-    EMAIL_SERVICE: process.env.EMAIL_SERVICE || 'UNDEFINED',
-    EMAIL_USER: process.env.EMAIL_USER || 'UNDEFINED',
-    EMAIL_APP_PASSWORD: process.env.EMAIL_APP_PASSWORD ? 
-      `PRESENTE (${process.env.EMAIL_APP_PASSWORD.length} chars, starts with SG.: ${process.env.EMAIL_APP_PASSWORD.startsWith('SG.')})` : 'UNDEFINED',
-    EMAIL_FROM_NAME: process.env.EMAIL_FROM_NAME || 'UNDEFINED',
-    EMAIL_FROM_ADDRESS: process.env.EMAIL_FROM_ADDRESS || 'UNDEFINED',
-    NODE_ENV: process.env.NODE_ENV || 'development'
-  };
-  
-  const allEmailVars = Object.keys(process.env).filter(key => 
-    key.includes('EMAIL') || key.includes('SENDGRID')
-  );
-  
+// Endpoint para verificar configuración
+app.get("/api/config", (req, res) => {
   res.json({
     success: true,
-    emailConfig: config,
-    allEmailVariables: allEmailVars,
-    status: {
-      hasAppPassword: !!process.env.EMAIL_APP_PASSWORD,
-      hasFromAddress: !!process.env.EMAIL_FROM_ADDRESS,
-      isValidApiKey: process.env.EMAIL_APP_PASSWORD ? process.env.EMAIL_APP_PASSWORD.startsWith('SG.') : false,
-      canSendEmail: !!process.env.EMAIL_APP_PASSWORD && !!process.env.EMAIL_FROM_ADDRESS
+    api: {
+      version: "1.0.0",
+      environment: process.env.NODE_ENV,
+      baseUrl: process.env.API_URL || `http://${req.headers.host}`,
+      cors: {
+        enabled: true,
+        allowedOrigins: allowedOrigins
+      }
+    },
+    services: {
+      database: {
+        host: process.env.MYSQLHOST,
+        database: process.env.MYSQLDATABASE,
+        user: process.env.MYSQLUSER
+      },
+      email: {
+        service: process.env.EMAIL_SERVICE,
+        from: process.env.EMAIL_FROM_ADDRESS,
+        configured: !!(process.env.EMAIL_APP_PASSWORD && process.env.EMAIL_FROM_ADDRESS)
+      }
     }
   });
 });
 
-// Health check en raíz
+// ==================== RUTA PRINCIPAL ====================
 app.get("/", (req, res) => {
   res.json({
     success: true,
-    message: "✅ API de Plantas funcionando",
+    message: "🏭 API InfraExpert - Sistema de Gestión de Plantas Industriales",
+    version: "1.0.0",
     timestamp: new Date().toISOString(),
-    port: PORT,
-    environment: process.env.NODE_ENV
+    documentation: {
+      health: "/api/health",
+      config: "/api/config",
+      emailConfig: "/api/email-config",
+      endpoints: {
+        auth: "/api/auth",
+        plantas: "/api/plantas",
+        incidencias: "/api/incidencias",
+        mantenimientos: "/api/mantenimientos",
+        reportes: "/api/reportes",
+        dashboard: "/api/dashboard"
+      }
+    },
+    support: {
+      email: process.env.EMAIL_FROM_ADDRESS,
+      status: "operational"
+    }
   });
 });
 
-app.get("/api/health", async (req, res) => {
-  const dbStatus = await testConnection();
-  res.json({
-    success: true,
-    message: "✅ Health check OK",
-    database: dbStatus ? "connected" : "disconnected",
-    port: PORT
+// ==================== MANEJO DE ERRORES ====================
+// 404 - Ruta no encontrada
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Ruta no encontrada",
+    requestedUrl: req.originalUrl,
+    availableEndpoints: [
+      "/api/health",
+      "/api/config",
+      "/api/auth",
+      "/api/plantas"
+    ]
   });
 });
 
-app.get("/api/debug-env", (req, res) => {
-  res.json({
-    emailAppPassword: process.env.EMAIL_APP_PASSWORD ? 
-      `✅ Presente (${process.env.EMAIL_APP_PASSWORD.length} caracteres)` : '❌ FALTANTE',
-    emailFromAddress: process.env.EMAIL_FROM_ADDRESS || '❌ FALTANTE',
-    emailFromName: process.env.EMAIL_FROM_NAME || '❌ FALTANTE',
-    allEnvKeys: Object.keys(process.env).filter(key => 
-      key.includes('EMAIL') || key.includes('SENDGRID')
-    )
+// Error handler global
+app.use((err, req, res, next) => {
+  console.error('❌ Error global:', err.stack);
+  
+  // Si es error de CORS
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({
+      success: false,
+      message: "Acceso no permitido desde este origen",
+      allowedOrigins: allowedOrigins
+    });
+  }
+  
+  res.status(500).json({
+    success: false,
+    message: 'Error interno del servidor',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    requestId: req.id || Date.now().toString(36)
   });
 });
 
-// Iniciar servidor
+// ==================== INICIAR SERVIDOR ====================
 app.listen(PORT, '0.0.0.0', async () => {
   console.log("==========================================");
   console.log(`🚀 SERVIDOR INICIADO EN PUERTO: ${PORT}`);
+  console.log(`🌍 Ambiente: ${process.env.NODE_ENV}`);
+  console.log(`🔗 URL: http://localhost:${PORT}`);
+  console.log(`🌐 Externa: https://infraexpert.cl`);
+  console.log(`🎯 Frontend: https://infraexpert.vercel.app`);
   console.log("==========================================");
   
-  const dbConnected = await testConnection();
-  console.log("🗄️ Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ DESCONECTADA");
-  
-  // ✅ VERIFICAR DIRECTORIOS DE UPLOADS AL INICIAR
-  const uploadsDir = path.join(__dirname, 'uploads');
-  const incidenciasDir = path.join(__dirname, 'uploads/incidencias');
-  
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log("📁 Directorio uploads creado:", uploadsDir);
+  // Verificar conexiones
+  try {
+    const dbConnected = await testConnection();
+    console.log("🗄️  Base de datos:", dbConnected ? "✅ CONECTADA" : "❌ ERROR");
+  } catch (error) {
+    console.error("❌ Error conectando a DB:", error.message);
   }
   
-  if (!fs.existsSync(incidenciasDir)) {
-    fs.mkdirSync(incidenciasDir, { recursive: true });
-    console.log("📁 Directorio incidencias creado:", incidenciasDir);
-  }
-  
-  console.log("📁 Servicio de archivos estáticos: ✅ CONFIGURADO");
-  console.log("🌍 Entorno:", process.env.NODE_ENV);
-  console.log("🔗 El dominio debería funcionar ahora");
+  console.log("📁 Archivos estáticos: ✅ CONFIGURADOS");
+  console.log("🔒 CORS configurado para:", allowedOrigins);
   console.log("==========================================");
-});
-
-// Manejo de errores
-app.use('*', (req, res) => {
-  res.status(404).json({ success: false, message: "Ruta no encontrada" });
 });
