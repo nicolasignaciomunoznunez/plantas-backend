@@ -33,10 +33,10 @@ const EMAIL_TEMPLATES = {
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
-    <h1 style="color: white; margin: 0;">Verify Your Email</h1>
+    <h1 style="color: white; margin: 0;">Verifica tu email</h1>
   </div>
   <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
-    <p>Bienvenido a R&V SPA,</p>
+    <p>Bienvenido a InfraExpert,</p>
     <p>Por favor confirma tu correo electrónico. Tu código es:</p>
     <div style="text-align: center; margin: 30px 0;">
       <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4c66afff;">${verificationCode}</span>
@@ -44,7 +44,7 @@ const EMAIL_TEMPLATES = {
     <p>Inserta este código en la página de verificación para completar tu registro.</p>
     <p>El código expirará en 15 minutos por razones de seguridad.</p>
     <p>Si no creaste la cuenta con nosotros simplemente ignora este correo.</p>
-    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+    <p>Saludos cordiales,<br>Equipo InfraExpert</p>
   </div>
   <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
     <p>This is an automated message, please do not reply to this email.</p>
@@ -73,7 +73,7 @@ const EMAIL_TEMPLATES = {
       <a href="${resetURL}" style="background-color: #4c66afff; color: white; padding: 12px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">Cambiar contraseña</a>
     </div>
     <p>El link va a expirar en 1 hora por razones de seguridad.</p>
-    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+    <p>Saludos cordiales,<br>Equipo InfraExpert</p>
   </div>
   <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
     <p>Este es un mensaje automático por favor no respondas este email</p>
@@ -110,7 +110,7 @@ const EMAIL_TEMPLATES = {
       <li>Evites usar la misma contraseña en múltiples sitios</li>
     </ul>
     <p>Gracias por ayudarnos a mantener tu cuenta segura.</p>
-    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+    <p>Saludos cordiales,<br>Equipo InfraExpert</p>
   </div>
   <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
     <p>Este es un mensaje automático por favor no respondas este email</p>
@@ -129,7 +129,7 @@ const EMAIL_TEMPLATES = {
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
   <div style="background: linear-gradient(to right, #4c66afff, #4c66afff); padding: 20px; text-align: center;">
-    <h1 style="color: white; margin: 0;">¡Bienvenido a R&V SPA!</h1>
+    <h1 style="color: white; margin: 0;">¡Bienvenido a InfraExpert!</h1>
   </div>
   <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);">
     <p>Hola ${userName},</p>
@@ -147,7 +147,7 @@ const EMAIL_TEMPLATES = {
       <li>Explorar todas las funcionalidades disponibles</li>
     </ul>
     <p>Si tienes alguna pregunta, no dudes en contactar a nuestro equipo de soporte.</p>
-    <p>Saludos cordiales,<br>Equipo R&V SPA</p>
+    <p>Saludos cordiales,<br>Equipo InfraExpert</p>
   </div>
   <div style="text-align: center; margin-top: 20px; color: #888; font-size: 0.8em;">
     <p>Este es un mensaje automático por favor no respondas este email</p>
