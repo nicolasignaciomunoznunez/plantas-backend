@@ -9,7 +9,6 @@ import {
     cambiarEstadoIncidencia,
     eliminarIncidencia,
     obtenerIncidenciasResumen,
-    // ✅ NUEVOS MÉTODOS
     subirFotos,
     agregarMateriales,
     completarIncidencia,
@@ -23,103 +22,130 @@ import {
     filtrarPlantasPorRol 
 } from "../middlewares/verificarPlantaRol.js";
 import { uploadMultiple } from "../middlewares/upload.js";
+import { uploadCorsMiddleware, preflightMiddleware } from "../middlewares/corsUpload.js";
 
 const router = express.Router();
 
 // Todas las rutas requieren autenticación
 router.use(verificarToken);
 
-// ==================== RUTAS ESPECÍFICAS ====================
+// ==================== MIDDLEWARE PARA PREFLIGHT REQUEST ====================
+router.options("*", preflightMiddleware);
+
+// ==================== RUTAS ESPECÍFICAS CON CORS ESPECIAL ====================
+
+// ✅ RUTA DE SUBIDA DE FOTOS - CON CORS ESPECÍFICO
+router.post("/:id/fotos", 
+    uploadCorsMiddleware, // ✅ CORS para uploads
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(),
+    uploadMultiple,
+    subirFotos
+);
+
+// ✅ OPCIÓN ESPECÍFICA PARA PREFLIGHT DE FOTOS
+router.options("/:id/fotos", uploadCorsMiddleware);
+
+// ==================== RUTAS DE REPORTE PDF ====================
 router.get("/:id/reporte-pdf", 
-    filtrarPlantasPorRol(), // ✅ Verifica acceso a la incidencia
+    filtrarPlantasPorRol(),
     generarReportePDF
 );
 
 router.get("/:id/completa", 
-    filtrarPlantasPorRol(), // ✅ Verifica acceso
+    filtrarPlantasPorRol(),
     obtenerIncidenciaCompleta
 );
 
-router.post("/:id/fotos", 
-    verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
-    uploadMultiple, 
-    subirFotos
-);
-
-router.delete("/:id/fotos/:fotoId", 
-    verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
-    eliminarFoto
-);
-
+// ==================== RUTAS DE MATERIALES ====================
 router.post("/:id/materiales", 
     verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     agregarMateriales
 );
 
 router.delete("/:id/materiales/:materialId", 
     verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     eliminarMaterial
 );
 
+// ==================== RUTAS DE COMPLETAR INCIDENCIA ====================
 router.put("/:id/completar", 
     verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     completarIncidencia
+);
+
+// ==================== RUTAS DE ELIMINAR FOTOS ====================
+router.delete("/:id/fotos/:fotoId", 
+    verificarRol(['admin', 'tecnico']), 
+    filtrarPlantasPorRol(),
+    eliminarFoto
 );
 
 // ==================== RUTAS CON PARÁMETROS ====================
 router.get("/planta/:plantId", 
-    filtrarPlantasPorRol(), // ✅ Filtra por plantas del usuario
+    filtrarPlantasPorRol(),
     obtenerIncidenciasPlanta
 );
 
 router.get("/estado/:estado", 
-    filtrarPlantasPorRol(), // ✅ Filtra por plantas del usuario
+    filtrarPlantasPorRol(),
     obtenerIncidenciasEstado
 );
 
 // ==================== RUTAS GENERALES ====================
 router.get("/:id", 
-    filtrarPlantasPorRol(), // ✅ Verifica acceso
+    filtrarPlantasPorRol(),
     obtenerIncidencia
 );
 
 router.put("/:id", 
     verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     actualizarIncidencia
 );
 
 router.patch("/:id/estado", 
     verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     cambiarEstadoIncidencia
 );
 
 router.delete("/:id", 
     verificarRol(['admin']), 
-    filtrarPlantasPorRol(), // ✅ Verifica que sea de su planta
+    filtrarPlantasPorRol(),
     eliminarIncidencia
 );
 
 // ==================== RUTAS SIN PARÁMETROS ====================
 router.post("/", 
-    filtrarPlantasPorRol(), // ✅ Para validar la plantaId del body
+    filtrarPlantasPorRol(),
     crearIncidencia
 );
 
 router.get("/", 
-    filtrarPlantasPorRol(), // ✅ Filtra incidencias por plantas del usuario
+    filtrarPlantasPorRol(),
     obtenerIncidencias
 );
 
 router.get("/resumen/dashboard", 
-    filtrarPlantasPorRol(), // ✅ Filtra resumen por plantas del usuario
+    filtrarPlantasPorRol(),
     obtenerIncidenciasResumen
 );
+
+// ==================== RUTA DE PRUEBA DE CORS ====================
+router.get("/test/cors", (req, res) => {
+    res.json({
+        success: true,
+        message: "CORS test successful",
+        headers: {
+            origin: req.headers.origin,
+            'access-control-allow-origin': res.get('Access-Control-Allow-Origin'),
+            'access-control-allow-credentials': res.get('Access-Control-Allow-Credentials')
+        }
+    });
+});
 
 export default router;
