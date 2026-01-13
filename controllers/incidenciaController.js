@@ -634,12 +634,10 @@ export const eliminarMaterial = async (req, res) => {
 // Generar reporte PDF con IMAGENES usando PDFKit
 
 
-
-
 export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
-        const { filtrosPlanta = {} } = req; // ✅ AGREGAR esto
+        const { filtrosPlanta = {} } = req;
         console.log('🎯 [PDF DEBUG] Iniciando generación de PDF para incidencia:', id);
 
         // Obtener datos completos
@@ -649,7 +647,7 @@ export const generarReportePDF = async (req, res) => {
             return res.status(404).json({ success: false, message: "Incidencia no encontrada" });
         }
         
-            if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
+        if (filtrosPlanta.plantaIds && filtrosPlanta.plantaIds.length > 0) {
             if (!filtrosPlanta.plantaIds.includes(incidencia.plantId)) {
                 return res.status(403).json({
                     success: false,
@@ -657,10 +655,12 @@ export const generarReportePDF = async (req, res) => {
                 });
             }
         }
+
         // Crear documento PDF
         const doc = new PDFDocument({ 
             margin: 50,
-            size: 'A4'
+            size: 'A4',
+            bufferPages: true
         });
         
         // Configurar headers
@@ -681,85 +681,141 @@ export const generarReportePDF = async (req, res) => {
         // Pipe el PDF a la respuesta
         doc.pipe(res);
 
-        // ✅ TÍTULO DEL REPORTE
-        doc.fontSize(20)
+        // =========== FUNCIÓN AUXILIAR PARA VERIFICAR ESPACIO ===========
+        const verificarEspacio = (alturaNecesaria) => {
+            if (doc.y + alturaNecesaria > 750) { // 750 es cerca del final de página A4
+                doc.addPage();
+                return 50; // Retorna nueva posición Y
+            }
+            return doc.y;
+        };
+
+        // =========== PORTADA / PÁGINA 1 ===========
+        
+        // ✅ ENCABEZADO CON TÍTULO
+        doc.fontSize(24)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('REPORTE DE INCIDENCIA', 50, 50, { align: 'center' });
-
-        // ✅ INFORMACIÓN BÁSICA
-        let yPosition = 120;
+           .text('REPORTE DE INCIDENCIA', {
+               align: 'center',
+               y: 80
+           });
         
-        doc.fontSize(12)
+        // Línea decorativa
+        doc.moveTo(100, 120)
+           .lineTo(500, 120)
+           .lineWidth(2)
+           .stroke('#2c5aa0');
+        
+        // ✅ INFORMACIÓN BÁSICA - MEJOR FORMATEADA
+        let yPos = 150;
+        
+        doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#000000')
-           .text('INFORMACIÓN BÁSICA', 50, yPosition);
+           .text('INFORMACIÓN BÁSICA', 50, yPos);
         
-        yPosition += 25;
+        yPos += 30;
+        
+        // Primera columna
+        doc.fontSize(11)
+           .font('Helvetica');
+        
+        doc.text(`ID de Incidencia:`, 50, yPos);
+        doc.font('Helvetica-Bold')
+           .text(` ${incidencia.id}`, 150, yPos);
+        
+        yPos += 18;
+        doc.font('Helvetica')
+           .text(`Título:`, 50, yPos);
+        doc.font('Helvetica-Bold')
+           .text(` ${incidencia.titulo}`, 150, yPos, { width: 180 });
+        
+        yPos += 18;
+        doc.font('Helvetica')
+           .text(`Planta:`, 50, yPos);
+        doc.font('Helvetica-Bold')
+           .text(` ${incidencia.plantaNombre}`, 150, yPos);
+        
+        yPos += 18;
+        doc.font('Helvetica')
+           .text(`Reportado por:`, 50, yPos);
+        doc.font('Helvetica-Bold')
+           .text(` ${incidencia.usuarioNombre}`, 150, yPos);
+        
+        // Segunda columna
+        let yPosCol2 = 150 + 30;
         
         doc.font('Helvetica')
-           .text(`ID de Incidencia: ${incidencia.id}`, 50, yPosition)
-           .text(`Título: ${incidencia.titulo}`, 250, yPosition);
+           .text(`Estado:`, 300, yPosCol2);
+        doc.font('Helvetica-Bold')
+           .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
+           .text(` ${incidencia.estado.toUpperCase()}`, 350, yPosCol2);
         
-        yPosition += 15;
-        doc.text(`Planta: ${incidencia.plantaNombre}`, 50, yPosition)
-           .text(`Estado: ${incidencia.estado.toUpperCase()}`, 250, yPosition);
-        
-        yPosition += 15;
-        doc.text(`Reportado por: ${incidencia.usuarioNombre}`, 50, yPosition)
-           .text(`Fecha de reporte: ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 250, yPosition);
+        yPosCol2 += 18;
+        doc.fillColor('#000000')
+           .font('Helvetica')
+           .text(`Fecha de reporte:`, 300, yPosCol2);
+        doc.font('Helvetica-Bold')
+           .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 400, yPosCol2);
         
         if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosition += 15;
-            doc.text(`Fecha de resolución: ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 50, yPosition);
+            yPosCol2 += 18;
+            doc.font('Helvetica')
+               .text(`Fecha de resolución:`, 300, yPosCol2);
+            doc.font('Helvetica-Bold')
+               .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 430, yPosCol2);
         }
-
-        yPosition += 30;
-
-        // ✅ DESCRIPCIÓN Y RESUMEN
-        doc.font('Helvetica-Bold')
-           .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPosition);
         
-        yPosition += 20;
+        yPos = Math.max(yPos, yPosCol2) + 30;
+        doc.fillColor('#000000');
+
+        // ✅ DESCRIPCIÓN DEL PROBLEMA
+        yPos = verificarEspacio(60);
+        
+        doc.font('Helvetica-Bold')
+           .fontSize(12)
+           .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPos);
+        
+        yPos += 25;
         
         doc.font('Helvetica')
            .fontSize(10)
-           .text(incidencia.descripcion, 50, yPosition, { 
+           .text(incidencia.descripcion, 50, yPos, { 
                width: 500, 
                align: 'justify',
-               lineGap: 2
+               lineGap: 4
            });
         
-        // Calcular altura de descripción
-        const descripcionHeight = Math.ceil(incidencia.descripcion.length / 70) * 12;
-        yPosition += descripcionHeight + 20;
+        // Calcular altura dinámica
+        const lineasDescripcion = Math.ceil(incidencia.descripcion.length / 85);
+        yPos += (lineasDescripcion * 12) + 20;
 
+        // ✅ RESUMEN DEL TRABAJO REALIZADO
         if (incidencia.resumenTrabajo) {
+            yPos = verificarEspacio(60);
+            
             doc.font('Helvetica-Bold')
                .fontSize(12)
-               .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPosition);
+               .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPos);
             
-            yPosition += 20;
+            yPos += 25;
             
             doc.font('Helvetica')
                .fontSize(10)
-               .text(incidencia.resumenTrabajo, 50, yPosition, { 
+               .text(incidencia.resumenTrabajo, 50, yPos, { 
                    width: 500, 
                    align: 'justify',
-                   lineGap: 2
+                   lineGap: 4
                });
-            
-            // Calcular altura de resumen
-            const resumenHeight = Math.ceil(incidencia.resumenTrabajo.length / 70) * 12;
-            yPosition += resumenHeight + 30;
         }
 
-        // ✅ FOTOS ANTES DEL TRABAJO (si existen)
+        // =========== FOTOS ANTES DEL TRABAJO ===========
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         if (fotosAntes.length > 0) {
-            // Nueva página para fotos
             doc.addPage();
-            doc.fontSize(14)
+            
+            doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
                .text('FOTOS ANTES DEL TRABAJO', 50, 50, { align: 'center' });
@@ -767,7 +823,6 @@ export const generarReportePDF = async (req, res) => {
             let fotoY = 80;
             
             fotosAntes.forEach((foto, index) => {
-                // Solo procesar si hay espacio
                 if (fotoY > 650) {
                     doc.addPage();
                     fotoY = 50;
@@ -780,38 +835,36 @@ export const generarReportePDF = async (req, res) => {
                 
                 fotoY += 15;
                 
-                // ✅ CORREGIDO: Ruta de imagen funcionando
-            try {
-    console.log('🖼️ [PDF DEBUG] Procesando foto:', foto.descripcion);
-    
-    // ✅ USAR BLOB DESDE BASE DE DATOS
-    if (foto.datos_imagen) {
-        doc.image(foto.datos_imagen, 50, fotoY, { 
-            width: 400,
-            height: 300,
-            fit: [400, 300]
-        });
-        fotoY += 320;
-        console.log('✅ Imagen cargada desde BLOB');
-    } else {
-        console.log('❌ No hay datos de imagen en BLOB');
-        doc.fontSize(10)
-           .font('Helvetica')
-           .fillColor('#ff0000')
-           .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
-        fotoY += 20;
-    }
-} catch (imageError) {
-    console.log('❌ Error al cargar imagen desde BLOB:', imageError);
-}
+                try {
+                    if (foto.datos_imagen) {
+                        doc.image(foto.datos_imagen, 50, fotoY, { 
+                            width: 400,
+                            height: 250,
+                            fit: [400, 250]
+                        });
+                        fotoY += 260;
+                    } else {
+                        doc.fontSize(9)
+                           .font('Helvetica')
+                           .fillColor('#666666')
+                           .text(`[Imagen no disponible]`, 50, fotoY);
+                        fotoY += 20;
+                    }
+                } catch (imageError) {
+                    console.log('❌ Error al cargar imagen:', imageError);
+                    fotoY += 20;
+                }
+                
+                fotoY += 10; // Espacio entre fotos
             });
         }
 
-        // ✅ FOTOS DESPUÉS DEL TRABAJO (si existen)
+        // =========== FOTOS DESPUÉS DEL TRABAJO ===========
         const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         if (fotosDespues.length > 0) {
             doc.addPage();
-            doc.fontSize(14)
+            
+            doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
                .text('FOTOS DESPUÉS DEL TRABAJO', 50, 50, { align: 'center' });
@@ -831,119 +884,169 @@ export const generarReportePDF = async (req, res) => {
                 
                 fotoY += 15;
                 
-                // ✅ CORREGIDO: Ruta de imagen funcionando
                 try {
-            console.log('🖼️ [PDF DEBUG] Procesando foto:', foto.descripcion);
-            
-            // ✅ USAR BLOB DESDE BASE DE DATOS
-            if (foto.datos_imagen) {
-                doc.image(foto.datos_imagen, 50, fotoY, { 
-                    width: 400,
-                    height: 300,
-                    fit: [400, 300]
-                });
-                fotoY += 320;
-                console.log('✅ Imagen cargada desde BLOB');
-            } else {
-                console.log('❌ No hay datos de imagen en BLOB');
-                doc.fontSize(10)
-                   .font('Helvetica')
-                   .fillColor('#ff0000')
-                   .text(`Imagen no disponible: ${foto.descripcion}`, 50, fotoY);
-                fotoY += 20;
-            }
-        } catch (imageError) {
-            console.log('❌ Error al cargar imagen desde BLOB:', imageError);
-        }
+                    if (foto.datos_imagen) {
+                        doc.image(foto.datos_imagen, 50, fotoY, { 
+                            width: 400,
+                            height: 250,
+                            fit: [400, 250]
+                        });
+                        fotoY += 260;
+                    } else {
+                        doc.fontSize(9)
+                           .font('Helvetica')
+                           .fillColor('#666666')
+                           .text(`[Imagen no disponible]`, 50, fotoY);
+                        fotoY += 20;
+                    }
+                } catch (imageError) {
+                    console.log('❌ Error al cargar imagen:', imageError);
+                    fotoY += 20;
+                }
+                
+                fotoY += 10;
             });
         }
 
-        // ✅ MATERIALES UTILIZADOS (si existen)
+        // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
             doc.addPage();
-            doc.fontSize(14)
+            
+            doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
                .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
             
             let materialY = 80;
-            let totalCosto = 0;
             
-            // Encabezados de tabla
+            // Encabezados de tabla con fondo
+            doc.rect(50, materialY, 500, 20)
+               .fill('#f0f0f0')
+               .stroke('#cccccc');
+            
             doc.font('Helvetica-Bold')
                .fontSize(10)
-               .text('Material', 50, materialY)
-               .text('Cantidad', 250, materialY)
-               .text('Costo Unitario', 350, materialY)
-               .text('Subtotal', 450, materialY);
+               .fillColor('#000000')
+               .text('Material', 55, materialY + 5)
+               .text('Cantidad', 250, materialY + 5)
+               .text('Costo Unitario', 350, materialY + 5)
+               .text('Subtotal', 450, materialY + 5);
             
-            materialY += 20;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 10;
-
+            materialY += 25;
+            let totalCosto = 0;
+            
             // Filas de materiales
             doc.font('Helvetica')
                .fontSize(9);
                
-            incidencia.materiales.forEach(material => {
+            incidencia.materiales.forEach((material, index) => {
+                // Alternar colores de fila
+                if (index % 2 === 0) {
+                    doc.rect(50, materialY - 2, 500, 20)
+                       .fill('#fafafa');
+                }
+                
                 const materialNombre = material.materialNombre || material.material_nombre;
                 const subtotal = material.cantidad * material.costo;
                 totalCosto += subtotal;
                 
-                doc.text(materialNombre, 50, materialY, { width: 180 })
+                doc.fillColor('#000000')
+                   .text(materialNombre, 55, materialY, { width: 180 })
                    .text(`${material.cantidad} ${material.unidad}`, 250, materialY)
                    .text(`$${material.costo.toLocaleString('es-CL')}`, 350, materialY)
                    .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
                 
-                materialY += 15;
+                materialY += 20;
             });
 
             // Total
             materialY += 10;
             doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 20;
+            materialY += 15;
             
             doc.font('Helvetica-Bold')
-               .fontSize(10)
+               .fontSize(11)
+               .fillColor('#2c5aa0')
                .text('TOTAL:', 350, materialY)
                .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
         }
 
-        // ✅ RESUMEN ESTADÍSTICO
+        // =========== PÁGINA FINAL CON RESUMEN Y FIRMA ===========
         doc.addPage();
-        doc.fontSize(14)
+        
+        // ✅ RESUMEN ESTADÍSTICO
+        doc.fontSize(16)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
            .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
         
         let statsY = 100;
-        doc.fontSize(11)
+        doc.fontSize(12)
            .font('Helvetica')
-           .fillColor('#000000')
-           .text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, statsY)
-           .text(`• Total de fotos (después): ${fotosDespues.length}`, 50, statsY + 20)
-           .text(`• Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50, statsY + 40);
+           .fillColor('#000000');
+        
+        // Lista con viñetas
+        const bullet = '• ';
+        const bulletWidth = 10;
+        
+        doc.text(bullet, 50, statsY);
+        doc.text(`Total de fotos (antes): ${fotosAntes.length}`, 50 + bulletWidth, statsY);
+        
+        statsY += 25;
+        doc.text(bullet, 50, statsY);
+        doc.text(`Total de fotos (después): ${fotosDespues.length}`, 50 + bulletWidth, statsY);
+        
+        statsY += 25;
+        doc.text(bullet, 50, statsY);
+        doc.text(`Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50 + bulletWidth, statsY);
         
         if (incidencia.materiales && incidencia.materiales.length > 0) {
             const costoTotal = incidencia.materiales.reduce((total, material) => 
                 total + (material.cantidad * material.costo), 0
             );
-            doc.text(`• Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50, statsY + 60);
+            statsY += 25;
+            doc.text(bullet, 50, statsY);
+            doc.text(`Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50 + bulletWidth, statsY);
         }
         
         if (incidencia.fechaReporte && incidencia.fechaResolucion) {
-            doc.text(`• Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50, statsY + 80);
+            statsY += 25;
+            doc.text(bullet, 50, statsY);
+            doc.text(`Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50 + bulletWidth, statsY);
         }
 
         // ✅ FIRMA Y FECHA
-        const firmaY = 200;
+        const firmaY = statsY + 60;
+        
         doc.font('Helvetica-Bold')
+           .fontSize(12)
            .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, firmaY);
         
-        doc.moveTo(50, firmaY + 20).lineTo(250, firmaY + 20).stroke();
+        // Línea para firma
+        doc.moveTo(50, firmaY + 30).lineTo(250, firmaY + 30).stroke();
         
+        // Fecha de generación
         doc.font('Helvetica')
-           .text(`Fecha de generación: ${new Date().toLocaleDateString('es-ES')}`, 350, firmaY + 20);
+           .fontSize(10)
+           .fillColor('#666666')
+           .text(`Documento generado el: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, 
+                 50, firmaY + 50);
+
+        // ✅ FOOTER CON NÚMERO DE PÁGINA
+        const pages = doc.bufferedPageRange();
+        for (let i = 0; i < pages.count; i++) {
+            doc.switchToPage(i);
+            
+            // Footer
+            doc.fontSize(8)
+               .font('Helvetica')
+               .fillColor('#999999')
+               .text(
+                   `Reporte Incidencia #${incidencia.id} - Página ${i + 1} de ${pages.count}`,
+                   50, 800, // Posición en la parte inferior
+                   { align: 'center' }
+               );
+        }
 
         // ✅ FINALIZAR DOCUMENTO
         doc.end();
@@ -962,20 +1065,24 @@ export const generarReportePDF = async (req, res) => {
     }
 };
 
-// ✅ FUNCIÓN AUXILIAR: Calcular tiempo de resolución
+// Función auxiliar para calcular tiempo de resolución
 function calcularTiempoResolucion(incidencia) {
-    if (!incidencia.fechaResolucion || !incidencia.fechaReporte) return 'N/A';
+    if (!incidencia.fechaReporte || !incidencia.fechaResolucion) return 'N/A';
     
     const inicio = new Date(incidencia.fechaReporte);
     const fin = new Date(incidencia.fechaResolucion);
-    const diffMs = fin - inicio;
+    const diferencia = fin - inicio;
     
-    const dias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const horas = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const horas = Math.floor(diferencia / (1000 * 60 * 60));
+    const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
     
-    if (dias > 0) {
-        return `${dias} día${dias > 1 ? 's' : ''} ${horas} hora${horas > 1 ? 's' : ''}`;
+    if (horas === 0) {
+        return `${minutos} minutos`;
+    } else if (horas === 1) {
+        return `${horas} hora y ${minutos} minutos`;
     } else {
-        return `${horas} hora${horas > 1 ? 's' : ''}`;
+        return `${horas} horas y ${minutos} minutos`;
     }
 }
+
+
