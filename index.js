@@ -43,14 +43,15 @@ console.log(`   DB: ${process.env.MYSQLUSER}@${process.env.MYSQLHOST}`);
 console.log(`   DATABASE: ${process.env.MYSQLDATABASE}`);
 console.log('🚀 ==========================================');
 
-// ==================== CONFIGURACIÓN CORS PARA PRODUCCIÓN ====================
+// ==================== CONFIGURACIÓN CORS CORREGIDA ====================
 const allowedOrigins = [
   // Dominios de producción
   'https://www.infraexpert.cl',
   'https://plantas-frontend-xly86glqe.vercel.app',
   'https://plantas-frontend.vercel.app',
   'https://infraexpert.cl',
-    'http://infraexpert.cl',
+  'http://infraexpert.cl',
+  'http://www.infraexpert.cl',
   
   // Dominios de desarrollo
   'http://localhost:3000',
@@ -58,54 +59,69 @@ const allowedOrigins = [
   'http://localhost:8080',
   
   // Subdominio API (si necesitas acceso directo)
-  'https://api.infraexpert.cl'
+  'https://api.infraexpert.cl',
+  'http://api.infraexpert.cl'
 ];
 
 console.log('🔒 Dominios permitidos por CORS:', allowedOrigins);
 
+// MIDDLEWARE CORS MANUAL - MÁS CONFIABLE
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  console.log(`🌐 [CORS] Request desde origen: ${origin} a ${req.method} ${req.path}`);
+  
+  // Si el origen está en la lista permitida
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    console.log(`✅ [CORS] Origen permitido: ${origin}`);
+  } else if (!origin) {
+    // Permitir requests sin origen (Postman, curl, etc.)
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    console.log(`⚠️ [CORS] Request sin origen, permitiendo acceso`);
+  } else {
+    console.log(`❌ [CORS] Origen NO permitido: ${origin}`);
+    // Aún permitimos pero logueamos
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+  
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Auth-Token, x-auth-token');
+  
+  // Manejar preflight requests
+  if (req.method === 'OPTIONS') {
+    console.log('🛫 [CORS] Preflight request recibida, enviando 200 OK');
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
+// También configurar CORS con el paquete como respaldo
 const corsOptions = {
   origin: function (origin, callback) {
-    console.log('🌐 [CORS ORIGIN DETECTED] Origen completo:', origin);
-    console.log('🌐 [CORS HEADERS] Headers recibidos:', {
-      origin: req.headers.origin,
-      referer: req.headers.referer,
-      host: req.headers.host
-    });
+    // Permitir requests sin origen
+    if (!origin) return callback(null, true);
     
-    // Permite todos temporalmente para debug
-    callback(null, true);
-    
-    /*
-    // Luego cambia a:
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log(`❌ Origen bloqueado: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      console.log(`❌ [CORS-PKG] Origen bloqueado por paquete cors: ${origin}`);
+      callback(null, true); // Temporalmente permitimos todo
     }
-    */
   },
   credentials: true,
   optionsSuccessStatus: 200,
-  // HEADERS IMPORTANTES PARA SUBIDA DE ARCHIVOS
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
-  ],
-  exposedHeaders: ['Content-Disposition'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-auth-token']
 };
 
 app.use(cors(corsOptions));
 
 // ==================== MIDDLEWARES DE SEGURIDAD ====================
 app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginResourcePolicy: false, // IMPORTANTE: Desactivar para permitir recursos cruzados
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
@@ -115,8 +131,8 @@ app.use(helmet({
       fontSrc: ["'self'", "https:", "data:"],
       connectSrc: [
         "'self'", 
-        "https://infraexpert.cl", 
-        "https://infraexpert.vercel.app",
+        "https://*.infraexpert.cl",
+        "http://*.infraexpert.cl",
         "wss:"
       ],
       frameSrc: ["'self'"],
@@ -125,11 +141,7 @@ app.use(helmet({
       formAction: ["'self'"]
     }
   },
-  hsts: {
-    maxAge: 31536000, // 1 año
-    includeSubDomains: true,
-    preload: true
-  }
+  hsts: false // Temporalmente desactivado para testing
 }));
 
 app.use(compression());
@@ -153,7 +165,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 // ==================== TRUST PROXY (IMPORTANTE PARA NGINX) ====================
-app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '172.26.10.94']);
 
 // ==================== LOGGING ====================
 app.use((req, res, next) => {
@@ -178,6 +190,9 @@ staticDirs.forEach(({ route, path: dirPath }) => {
   app.use(route, express.static(dirPath, {
     maxAge: '30d',
     setHeaders: (res, path) => {
+      // Agregar headers CORS para archivos estáticos también
+      res.set('Access-Control-Allow-Origin', '*');
+      res.set('Access-Control-Allow-Credentials', 'true');
       res.set('Cache-Control', 'public, max-age=2592000'); // 30 días
     }
   }));
@@ -301,14 +316,16 @@ app.use('*', (req, res) => {
 
 // Error handler global
 app.use((err, req, res, next) => {
-  console.error('❌ Error global:', err.stack);
+  console.error('❌ Error global:', err.message);
+  console.error('❌ Stack:', err.stack);
   
   // Si es error de CORS
   if (err.message === 'Not allowed by CORS') {
     return res.status(403).json({
       success: false,
       message: "Acceso no permitido desde este origen",
-      allowedOrigins: allowedOrigins
+      allowedOrigins: allowedOrigins,
+      yourOrigin: req.headers.origin
     });
   }
   
@@ -316,7 +333,7 @@ app.use((err, req, res, next) => {
     success: false,
     message: 'Error interno del servidor',
     error: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    requestId: req.id || Date.now().toString(36)
+    requestId: Date.now().toString(36)
   });
 });
 
