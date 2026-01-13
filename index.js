@@ -49,6 +49,8 @@ const allowedOrigins = [
   'https://www.infraexpert.cl',
   'https://plantas-frontend-xly86glqe.vercel.app',
   'https://plantas-frontend.vercel.app',
+  'https://infraexpert.cl',
+    'http://infraexpert.cl',
   
   // Dominios de desarrollo
   'http://localhost:3000',
