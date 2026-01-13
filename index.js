@@ -65,19 +65,40 @@ console.log('🔒 Dominios permitidos por CORS:', allowedOrigins);
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permitir requests sin origen
-    if (!origin) return callback(null, true);
+    console.log('🌐 [CORS ORIGIN DETECTED] Origen completo:', origin);
+    console.log('🌐 [CORS HEADERS] Headers recibidos:', {
+      origin: req.headers.origin,
+      referer: req.headers.referer,
+      host: req.headers.host
+    });
     
-    if (allowedOrigins.includes(origin)) {
+    // Permite todos temporalmente para debug
+    callback(null, true);
+    
+    /*
+    // Luego cambia a:
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log(`⚠️  Origen bloqueado: ${origin}`);
-      console.log(`📋 Permitidos: ${allowedOrigins.join(', ')}`);
+      console.log(`❌ Origen bloqueado: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
+    */
   },
   credentials: true,
-  optionsSuccessStatus: 200
+  optionsSuccessStatus: 200,
+  // HEADERS IMPORTANTES PARA SUBIDA DE ARCHIVOS
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Access-Control-Request-Method',
+    'Access-Control-Request-Headers'
+  ],
+  exposedHeaders: ['Content-Disposition'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS']
 };
 
 app.use(cors(corsOptions));
