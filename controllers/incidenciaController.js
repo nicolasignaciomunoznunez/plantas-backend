@@ -663,19 +663,6 @@ export const generarReportePDF = async (req, res) => {
             titulo: incidencia.titulo,
             tieneFotos: !!incidencia.fotos,
             totalFotos: incidencia.fotos?.length || 0,
-            fotosDetalle: incidencia.fotos?.map((f, i) => ({
-                indice: i,
-                id: f.id,
-                tipo: f.tipo,
-                descripcion: f.descripcion,
-                tieneDatosImagen: !!f.datos_imagen,
-                tipoDato: typeof f.datos_imagen,
-                esBuffer: Buffer.isBuffer(f.datos_imagen),
-                longitud: f.datos_imagen?.length || 0,
-                primerosBytes: Buffer.isBuffer(f.datos_imagen) 
-                    ? f.datos_imagen.slice(0, 10).toString('hex').toUpperCase()
-                    : 'no-buffer'
-            })) || 'No hay fotos',
             tieneMateriales: !!incidencia.materiales,
             totalMateriales: incidencia.materiales?.length || 0
         });
@@ -684,7 +671,8 @@ export const generarReportePDF = async (req, res) => {
         const doc = new PDFDocument({ 
             margin: 50,
             size: 'A4',
-            bufferPages: true
+            bufferPages: true,
+            autoFirstPage: false // Control manual de la primera página
         });
         
         // Configurar headers
@@ -705,16 +693,21 @@ export const generarReportePDF = async (req, res) => {
         // Pipe el PDF a la respuesta
         doc.pipe(res);
 
-        // =========== FUNCIÓN AUXILIAR PARA VERIFICAR ESPACIO ===========
-        const verificarEspacio = (alturaNecesaria) => {
-            if (doc.y + alturaNecesaria > 750) {
+        // =========== FUNCIONES AUXILIARES ===========
+        const agregarPaginaSiNecesario = (alturaNecesaria) => {
+            if (!doc.page || doc.y + alturaNecesaria > doc.page.height - 50) {
                 doc.addPage();
                 return 50;
             }
             return doc.y;
         };
 
+        const agregarEspacio = (cantidad = 10) => {
+            doc.moveDown(cantidad/12);
+        };
+
         // =========== PÁGINA 1: INFORMACIÓN BÁSICA ===========
+        doc.addPage();
         
         // TÍTULO PRINCIPAL
         doc.fontSize(24)
@@ -731,44 +724,44 @@ export const generarReportePDF = async (req, res) => {
            .lineWidth(2)
            .stroke('#2c5aa0');
         
-        // INFORMACIÓN BÁSICA
-        let yPos = 130;
-        
+        // INFORMACIÓN BÁSICA - MEJOR INTERLINEADO
         doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#000000')
-           .text('INFORMACIÓN BÁSICA', 50, yPos);
+           .text('INFORMACIÓN BÁSICA', 50, 130);
         
-        yPos += 30;
+        let yPos = 160;
         
-        // Primera columna
+        // Configurar interlineado reducido
         doc.fontSize(11)
-           .font('Helvetica');
-        
+           .font('Helvetica')
+           .lineGap(4); // Interlineado compacto
+
+        // Primera columna
         doc.text(`ID de Incidencia:`, 50, yPos);
         doc.font('Helvetica-Bold')
            .text(` ${incidencia.id}`, 170, yPos);
         
-        yPos += 20;
+        yPos += 18; // Reducido de 20
         doc.font('Helvetica')
            .text(`Título:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${incidencia.titulo}`, 170, yPos, { width: 250 });
+           .text(` ${incidencia.titulo}`, 170, yPos, { width: 250, lineGap: 0 });
         
-        yPos += 20;
+        yPos += 18;
         doc.font('Helvetica')
            .text(`Planta:`, 50, yPos);
         doc.font('Helvetica-Bold')
            .text(` ${incidencia.plantaNombre}`, 170, yPos);
         
-        yPos += 20;
+        yPos += 18;
         doc.font('Helvetica')
            .text(`Reportado por:`, 50, yPos);
         doc.font('Helvetica-Bold')
            .text(` ${incidencia.usuarioNombre}`, 170, yPos);
         
         // Segunda columna
-        let yPosCol2 = 130 + 30;
+        let yPosCol2 = 160;
         
         doc.font('Helvetica')
            .text(`Estado:`, 350, yPosCol2);
@@ -776,7 +769,7 @@ export const generarReportePDF = async (req, res) => {
            .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
            .text(` ${incidencia.estado.toUpperCase()}`, 400, yPosCol2);
         
-        yPosCol2 += 20;
+        yPosCol2 += 18;
         doc.fillColor('#000000')
            .font('Helvetica')
            .text(`Fecha de reporte:`, 350, yPosCol2);
@@ -784,280 +777,259 @@ export const generarReportePDF = async (req, res) => {
            .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 450, yPosCol2);
         
         if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosCol2 += 20;
+            yPosCol2 += 18;
             doc.font('Helvetica')
                .text(`Fecha de resolución:`, 350, yPosCol2);
             doc.font('Helvetica-Bold')
                .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 470, yPosCol2);
         }
         
-        yPos = Math.max(yPos, yPosCol2) + 30;
-        doc.fillColor('#000000');
-
+        yPos = Math.max(yPos, yPosCol2) + 25; // Espacio reducido
+        
         // DESCRIPCIÓN DEL PROBLEMA
-        yPos = verificarEspacio(60);
+        yPos = agregarPaginaSiNecesario(80);
         
         doc.font('Helvetica-Bold')
            .fontSize(12)
+           .lineGap(4)
            .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPos);
         
-        yPos += 20;
+        yPos += 15; // Reducido de 20
         
         doc.font('Helvetica')
            .fontSize(10)
            .text(incidencia.descripcion || 'Sin descripción', 50, yPos, { 
                width: 500, 
                align: 'left',
-               lineGap: 4
+               lineGap: 3, // Interlineado más compacto
+               paragraphGap: 0
            });
         
-        const lineasDescripcion = Math.ceil((incidencia.descripcion?.length || 0) / 85);
-        yPos += (lineasDescripcion * 12) + 25;
+        // Calcular altura dinámica
+        const lineasDescripcion = Math.ceil(((incidencia.descripcion?.length || 0) / 85) || 1);
+        yPos += (lineasDescripcion * 10) + 15; // Altura reducida
 
         // RESUMEN DEL TRABAJO REALIZADO
         if (incidencia.resumenTrabajo) {
-            yPos = verificarEspacio(60);
+            yPos = agregarPaginaSiNecesario(60);
             
             doc.font('Helvetica-Bold')
                .fontSize(12)
                .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPos);
             
-            yPos += 20;
+            yPos += 15;
             
             doc.font('Helvetica')
                .fontSize(10)
                .text(incidencia.resumenTrabajo, 50, yPos, { 
                    width: 500, 
                    align: 'left',
-                   lineGap: 4
+                   lineGap: 3,
+                   paragraphGap: 0
                });
+            
+            const lineasResumen = Math.ceil(((incidencia.resumenTrabajo?.length || 0) / 85) || 1);
+            yPos += (lineasResumen * 10) + 20;
         }
 
         // =========== FOTOS ANTES DEL TRABAJO ===========
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         if (fotosAntes.length > 0) {
-            doc.addPage();
+            // Solo agregar página si necesitamos espacio para al menos una foto
+            yPos = agregarPaginaSiNecesario(300);
+            
+            // Si estamos en una nueva página, ajustar posición Y
+            if (doc.y <= 100) {
+                yPos = 50;
+            }
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('FOTOS ANTES DEL TRABAJO', 50, 50, { align: 'center' });
+               .text('FOTOS ANTES DEL TRABAJO', 50, yPos, { align: 'center' });
             
-            let fotoY = 80;
+            yPos += 25;
             
             fotosAntes.forEach((foto, index) => {
-                if (fotoY > 650) {
+                // Verificar si hay espacio para la foto completa
+                if (yPos > 650) {
                     doc.addPage();
-                    fotoY = 50;
+                    yPos = 50;
                     doc.fontSize(16)
                        .font('Helvetica-Bold')
                        .fillColor('#2c5aa0')
-                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
+                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, yPos, { align: 'center' });
+                    yPos += 25;
                 }
                 
                 // Título de la foto
                 doc.fontSize(10)
                    .font('Helvetica-Bold')
                    .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, fotoY);
+                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPos);
                 
-                fotoY += 15;
+                yPos += 12;
                 
-                // PROCESAR IMAGEN CON DEBUG MEJORADO
+                // PROCESAR IMAGEN
                 try {
-                    console.log(`🖼️ [PDF IMAGE DEBUG] Procesando foto ${index + 1}:`, {
-                        descripcion: foto.descripcion,
-                        tieneDatos: !!foto.datos_imagen,
-                        tipoDato: typeof foto.datos_imagen,
-                        esBuffer: Buffer.isBuffer(foto.datos_imagen),
-                        longitud: foto.datos_imagen?.length || 0
-                    });
-
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        // Verificar si es una imagen real (no texto)
                         const primerosBytes = foto.datos_imagen.slice(0, 4).toString('hex').toUpperCase();
-                        console.log(`🔍 [PDF IMAGE DEBUG] Primeros bytes: ${primerosBytes}`);
-                        
-                        // JPEG: FFD8FFE0 o FFD8FFE1
-                        // PNG: 89504E47
-                        // GIF: 47494638
-                        // BMP: 424D
                         
                         if (primerosBytes.startsWith('FFD8') || 
                             primerosBytes === '89504E47' || 
                             primerosBytes.startsWith('474946')) {
                             
-                            console.log('✅ [PDF IMAGE DEBUG] Es una imagen válida, renderizando...');
-                            
-                            doc.image(foto.datos_imagen, 50, fotoY, { 
+                            doc.image(foto.datos_imagen, 50, yPos, { 
                                 width: 400,
                                 height: 250,
                                 fit: [400, 250],
                                 align: 'center'
                             });
-                            fotoY += 260;
-                            console.log('✅ [PDF IMAGE DEBUG] Imagen renderizada exitosamente');
+                            yPos += 255;
                             
                         } else {
-                            console.log('⚠️ [PDF IMAGE DEBUG] No parece ser una imagen válida, mostrando placeholder');
-                            
-                            // Mostrar placeholder
-                            doc.rect(50, fotoY, 400, 250)
+                            // Placeholder para formato no soportado
+                            doc.rect(50, yPos, 400, 250)
                                .fill('#f5f5f5')
                                .stroke('#cccccc');
                             
                             doc.fontSize(10)
                                .font('Helvetica')
                                .fillColor('#666666')
-                               .text('Formato de imagen no soportado', 150, fotoY + 120);
+                               .text('Formato de imagen no soportado', 150, yPos + 120);
                             
-                            doc.fontSize(8)
-                               .text(foto.descripcion || 'Imagen no disponible', 50, fotoY + 140, {
-                                   width: 400,
-                                   align: 'center'
-                               });
-                            
-                            fotoY += 260;
+                            yPos += 255;
                         }
                         
                     } else {
-                        console.log('❌ [PDF IMAGE DEBUG] Sin datos de imagen válidos');
-                        
-                        // Mostrar placeholder
-                        doc.rect(50, fotoY, 400, 250)
+                        // Placeholder para sin datos
+                        doc.rect(50, yPos, 400, 250)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
                         
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#666666')
-                           .text('Imagen no disponible', 180, fotoY + 120);
+                           .text('Imagen no disponible', 180, yPos + 120);
                         
-                        fotoY += 260;
+                        yPos += 255;
                     }
                     
                 } catch (imageError) {
                     console.log('❌ [PDF IMAGE DEBUG] Error al procesar imagen:', imageError.message);
                     
-                    // Mostrar placeholder de error
-                    doc.rect(50, fotoY, 400, 250)
+                    doc.rect(50, yPos, 400, 250)
                        .fill('#ffe6e6')
                        .stroke('#ff9999');
                     
                     doc.fontSize(10)
                        .font('Helvetica')
                        .fillColor('#ff0000')
-                       .text('Error al cargar imagen', 160, fotoY + 120);
+                       .text('Error al cargar imagen', 160, yPos + 120);
                     
-                    doc.fontSize(8)
-                       .text(foto.descripcion || 'Error desconocido', 50, fotoY + 140, {
-                           width: 400,
-                           align: 'center'
-                       });
-                    
-                    fotoY += 260;
+                    yPos += 255;
                 }
                 
-                fotoY += 20; // Espacio entre fotos
+                yPos += 15; // Espacio entre fotos
             });
-        } else {
-            // Si no hay fotos, añadir página informativa
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#666666')
-               .text('NO HAY FOTOS ANTES DEL TRABAJO', 50, 100, { align: 'center' });
-            
-            doc.fontSize(10)
-               .font('Helvetica')
-               .text('Esta incidencia no tiene fotografías registradas antes del trabajo.', 
-                     50, 130, { width: 500, align: 'center' });
         }
+        // NO agregar página si no hay fotos - eliminar esa sección
 
         // =========== FOTOS DESPUÉS DEL TRABAJO ===========
         const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         if (fotosDespues.length > 0) {
-            doc.addPage();
+            // Solo agregar página si no hay espacio suficiente
+            yPos = agregarPaginaSiNecesario(300);
+            
+            if (doc.y <= 100) {
+                yPos = 50;
+            }
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('FOTOS DESPUÉS DEL TRABAJO', 50, 50, { align: 'center' });
+               .text('FOTOS DESPUÉS DEL TRABAJO', 50, yPos, { align: 'center' });
             
-            let fotoY = 80;
+            yPos += 25;
             
             fotosDespues.forEach((foto, index) => {
-                if (fotoY > 650) {
+                if (yPos > 650) {
                     doc.addPage();
-                    fotoY = 50;
+                    yPos = 50;
                     doc.fontSize(16)
                        .font('Helvetica-Bold')
                        .fillColor('#2c5aa0')
-                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
+                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, yPos, { align: 'center' });
+                    yPos += 25;
                 }
                 
                 doc.fontSize(10)
                    .font('Helvetica-Bold')
                    .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, fotoY);
+                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPos);
                 
-                fotoY += 15;
+                yPos += 12;
                 
-                // Mismo procesamiento que para fotos "antes"
                 try {
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        doc.image(foto.datos_imagen, 50, fotoY, { 
+                        doc.image(foto.datos_imagen, 50, yPos, { 
                             width: 400,
                             height: 250,
                             fit: [400, 250]
                         });
-                        fotoY += 260;
+                        yPos += 255;
                     } else {
-                        doc.rect(50, fotoY, 400, 250)
+                        doc.rect(50, yPos, 400, 250)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
                         
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#666666')
-                           .text('Imagen no disponible', 180, fotoY + 120);
+                           .text('Imagen no disponible', 180, yPos + 120);
                         
-                        fotoY += 260;
+                        yPos += 255;
                     }
                 } catch (imageError) {
                     console.log('❌ Error al cargar imagen "después":', imageError);
-                    fotoY += 260;
+                    yPos += 255;
                 }
                 
-                fotoY += 20;
+                yPos += 15;
             });
         }
 
         // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
-            doc.addPage();
+            // Calcular altura necesaria para la tabla
+            const alturaTabla = 40 + (incidencia.materiales.length * 18);
+            yPos = agregarPaginaSiNecesario(alturaTabla);
+            
+            if (doc.y <= 100) {
+                yPos = 50;
+            }
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
+               .text('MATERIALES UTILIZADOS', 50, yPos, { align: 'center' });
             
-            let materialY = 80;
+            yPos += 30;
             
             // Encabezados de tabla
-            doc.rect(50, materialY, 500, 20)
+            doc.rect(50, yPos, 500, 18)
                .fill('#f0f0f0')
                .stroke('#cccccc');
             
             doc.font('Helvetica-Bold')
                .fontSize(10)
                .fillColor('#000000')
-               .text('Material', 55, materialY + 5)
-               .text('Cantidad', 250, materialY + 5)
-               .text('Costo Unitario', 350, materialY + 5)
-               .text('Subtotal', 450, materialY + 5);
+               .text('Material', 55, yPos + 4)
+               .text('Cantidad', 250, yPos + 4)
+               .text('Costo Unitario', 350, yPos + 4)
+               .text('Subtotal', 450, yPos + 4);
             
-            materialY += 25;
+            yPos += 22;
             let totalCosto = 0;
             
             // Filas de materiales
@@ -1067,7 +1039,7 @@ export const generarReportePDF = async (req, res) => {
             incidencia.materiales.forEach((material, index) => {
                 // Alternar colores de fila
                 if (index % 2 === 0) {
-                    doc.rect(50, materialY - 2, 500, 18)
+                    doc.rect(50, yPos - 2, 500, 16)
                        .fill('#fafafa');
                 }
                 
@@ -1078,95 +1050,101 @@ export const generarReportePDF = async (req, res) => {
                 totalCosto += subtotal;
                 
                 doc.fillColor('#000000')
-                   .text(materialNombre, 55, materialY, { width: 180 })
-                   .text(`${cantidad} ${material.unidad || 'unidad'}`, 250, materialY)
-                   .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, materialY)
-                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
+                   .text(materialNombre, 55, yPos, { width: 180 })
+                   .text(`${cantidad} ${material.unidad || 'unidad'}`, 250, yPos)
+                   .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, yPos)
+                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, yPos);
                 
-                materialY += 18;
+                yPos += 16;
             });
 
             // Total
-            materialY += 10;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
-            materialY += 15;
+            yPos += 8;
+            doc.moveTo(50, yPos).lineTo(550, yPos).stroke();
+            yPos += 12;
             
             doc.font('Helvetica-Bold')
                .fontSize(11)
                .fillColor('#2c5aa0')
-               .text('TOTAL:', 350, materialY)
-               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
-        } else {
-            // Si no hay materiales
-            doc.addPage();
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#666666')
-               .text('NO HAY MATERIALES REGISTRADOS', 50, 100, { align: 'center' });
-            
-            doc.fontSize(10)
-               .font('Helvetica')
-               .text('Esta incidencia no tiene materiales registrados.', 
-                     50, 130, { width: 500, align: 'center' });
+               .text('TOTAL:', 350, yPos)
+               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, yPos);
         }
+        // NO agregar página si no hay materiales
 
-        // =========== PÁGINA FINAL CON RESUMEN Y FIRMA ===========
-        doc.addPage();
+        // =========== RESUMEN ESTADÍSTICO Y FIRMA ===========
+        // Calcular altura necesaria
+        const alturaResumen = 150;
+        yPos = agregarPaginaSiNecesario(alturaResumen);
         
-        // RESUMEN ESTADÍSTICO
-        doc.fontSize(16)
-           .font('Helvetica-Bold')
-           .fillColor('#2c5aa0')
-           .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
+        if (doc.y <= 100) {
+            yPos = 50;
+        }
         
-        let statsY = 100;
-        doc.fontSize(12)
+        // Solo agregar título si estamos en una posición alta
+        if (yPos <= 100) {
+            doc.fontSize(16)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('RESUMEN ESTADÍSTICO', 50, yPos, { align: 'center' });
+            yPos += 40;
+        } else {
+            doc.fontSize(16)
+               .font('Helvetica-Bold')
+               .fillColor('#2c5aa0')
+               .text('RESUMEN', 50, yPos);
+            yPos += 25;
+        }
+        
+        doc.fontSize(11)
            .font('Helvetica')
-           .fillColor('#000000');
+           .fillColor('#000000')
+           .lineGap(3);
         
         const bullet = '• ';
         const bulletWidth = 10;
         
-        doc.text(bullet, 50, statsY);
-        doc.text(`Total de fotos (antes): ${fotosAntes.length}`, 50 + bulletWidth, statsY);
+        doc.text(bullet, 50, yPos);
+        doc.text(`Total de fotos (antes): ${fotosAntes.length}`, 50 + bulletWidth, yPos);
         
-        statsY += 25;
-        doc.text(bullet, 50, statsY);
-        doc.text(`Total de fotos (después): ${fotosDespues.length}`, 50 + bulletWidth, statsY);
+        yPos += 20;
+        doc.text(bullet, 50, yPos);
+        doc.text(`Total de fotos (después): ${fotosDespues.length}`, 50 + bulletWidth, yPos);
         
-        statsY += 25;
-        doc.text(bullet, 50, statsY);
-        doc.text(`Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50 + bulletWidth, statsY);
+        yPos += 20;
+        doc.text(bullet, 50, yPos);
+        doc.text(`Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50 + bulletWidth, yPos);
         
         if (incidencia.materiales && incidencia.materiales.length > 0) {
             const costoTotal = incidencia.materiales.reduce((total, material) => 
                 total + ((parseFloat(material.cantidad) || 0) * (parseFloat(material.costo) || 0)), 0
             );
-            statsY += 25;
-            doc.text(bullet, 50, statsY);
-            doc.text(`Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50 + bulletWidth, statsY);
+            yPos += 20;
+            doc.text(bullet, 50, yPos);
+            doc.text(`Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50 + bulletWidth, yPos);
         }
         
         if (incidencia.fechaReporte && incidencia.fechaResolucion) {
-            statsY += 25;
-            doc.text(bullet, 50, statsY);
-            doc.text(`Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50 + bulletWidth, statsY);
+            yPos += 20;
+            doc.text(bullet, 50, yPos);
+            doc.text(`Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50 + bulletWidth, yPos);
         }
 
-        // FIRMA Y FECHA
-        const firmaY = statsY + 60;
-        
-        doc.font('Helvetica-Bold')
-           .fontSize(12)
-           .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, firmaY);
-        
-        doc.moveTo(50, firmaY + 30).lineTo(250, firmaY + 30).stroke();
-        
-        doc.font('Helvetica')
-           .fontSize(10)
-           .fillColor('#666666')
-           .text(`Documento generado el: ${new Date().toLocaleDateString('es-ES')} ${new Date().toLocaleTimeString('es-ES')}`, 
-                 50, firmaY + 50);
+        // FIRMA Y FECHA - solo si hay espacio
+        if (yPos < 650) {
+            yPos += 40;
+            
+            doc.font('Helvetica-Bold')
+               .fontSize(12)
+               .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, yPos);
+            
+            doc.moveTo(50, yPos + 25).lineTo(250, yPos + 25).stroke();
+            
+            doc.font('Helvetica')
+               .fontSize(10)
+               .fillColor('#666666')
+               .text(`Documento generado el: ${new Date().toLocaleDateString('es-ES')}`, 
+                     50, yPos + 40);
+        }
 
         // FOOTER CON NÚMERO DE PÁGINA
         const pages = doc.bufferedPageRange();
@@ -1185,7 +1163,7 @@ export const generarReportePDF = async (req, res) => {
 
         // FINALIZAR DOCUMENTO
         doc.end();
-        console.log('✅ [PDF DEBUG] PDF generado exitosamente');
+        console.log(`✅ [PDF DEBUG] PDF generado exitosamente - ${pages.count} páginas`);
 
     } catch (error) {
         console.log('❌ [PDF DEBUG] ERROR CAPTURADO:', error);
