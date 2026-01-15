@@ -639,7 +639,9 @@ export const generarReportePDF = async (req, res) => {
     try {
         const { id } = req.params;
         const { filtrosPlanta = {} } = req;
-        console.log('🎯 [PDF DEBUG] Iniciando generación de PDF para incidencia:', id);
+        
+        console.log('🎯 [PDF] Generando PDF para incidencia:', id);
+        console.log('🔄 [PDF] Usando controlador PDFKit corregido');
 
         // Obtener datos completos
         const incidencia = await Incidencia.buscarCompletaPorId(id);
@@ -657,27 +659,73 @@ export const generarReportePDF = async (req, res) => {
             }
         }
 
-        // DEBUG DETALLADO DE LOS DATOS RECIBIDOS
-        console.log('🔍 [PDF DEBUG] Incidencia completa recibida:', {
-            id: incidencia.id,
-            titulo: incidencia.titulo,
-            tieneFotos: !!incidencia.fotos,
-            totalFotos: incidencia.fotos?.length || 0,
-            tieneMateriales: !!incidencia.materiales,
-            totalMateriales: incidencia.materiales?.length || 0
-        });
+        // =========== FUNCIÓN PARA LIMPIAR HTML ===========
+        const limpiarTexto = (texto) => {
+            if (!texto || typeof texto !== 'string') return '';
+            
+            // Remover todas las etiquetas HTML
+            let limpio = texto.replace(/<[^>]*>/g, '');
+            
+            // Reemplazar entidades HTML comunes
+            const entidades = {
+                '&nbsp;': ' ',
+                '&amp;': '&',
+                '&lt;': '<',
+                '&gt;': '>',
+                '&quot;': '"',
+                '&#39;': "'",
+                '&#x27;': "'",
+                '&#x2F;': '/',
+                '&#xA0;': ' ',
+                '&euro;': '€',
+                '&copy;': '©',
+                '&reg;': '®',
+                '&trade;': '™',
+                '&pound;': '£',
+                '&yen;': '¥',
+                '&cent;': '¢'
+            };
+            
+            Object.keys(entidades).forEach(entidad => {
+                limpio = limpio.replace(new RegExp(entidad, 'gi'), entidades[entidad]);
+            });
+            
+            // Remover espacios múltiples
+            limpio = limpio.replace(/\s+/g, ' ').trim();
+            
+            return limpio;
+        };
+
+        // DEBUG: Verificar datos antes de limpiar
+        console.log('🔍 [PDF DEBUG] Verificando datos para limpieza:');
+        console.log('🔍 Título (antes):', incidencia.titulo);
+        console.log('🔍 Título (después):', limpiarTexto(incidencia.titulo));
+        
+        if (incidencia.materiales?.length > 0) {
+            console.log('🔍 Materiales para limpiar:');
+            incidencia.materiales.forEach((mat, idx) => {
+                console.log(`  Material ${idx}:`, {
+                    antes: mat.nombre || mat.materialNombre,
+                    despues: limpiarTexto(mat.nombre || mat.materialNombre),
+                    tieneHTML: (mat.nombre || mat.materialNombre)?.includes('<') ? 'SÍ' : 'NO'
+                });
+            });
+        }
 
         // Crear documento PDF
         const doc = new PDFDocument({ 
             margin: 50,
             size: 'A4',
-            bufferPages: true,
-            autoFirstPage: false // Control manual de la primera página
+            bufferPages: true
         });
         
-        // Configurar headers
+        // Configurar headers para evitar caché
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=reporte-incidencia-${id}.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=reporte-${id}-${Date.now()}.pdf`);
+        res.setHeader('X-PDF-Generator', 'PDFKit-Corregido');
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         
         // Manejar errores del stream
         doc.on('error', (error) => {
@@ -694,74 +742,81 @@ export const generarReportePDF = async (req, res) => {
         doc.pipe(res);
 
         // =========== FUNCIONES AUXILIARES ===========
-        const agregarPaginaSiNecesario = (alturaNecesaria) => {
-            if (!doc.page || doc.y + alturaNecesaria > doc.page.height - 50) {
+        const verificarEspacio = (alturaNecesaria) => {
+            if (doc.y + alturaNecesaria > doc.page.height - 50) {
                 doc.addPage();
                 return 50;
             }
             return doc.y;
         };
 
-        const agregarEspacio = (cantidad = 10) => {
-            doc.moveDown(cantidad/12);
-        };
-
         // =========== PÁGINA 1: INFORMACIÓN BÁSICA ===========
-        doc.addPage();
         
-        // TÍTULO PRINCIPAL
+        // TÍTULO PRINCIPAL (con marca de versión)
         doc.fontSize(24)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('REPORTE DE INCIDENCIA', {
+           .text('REPORTE DE INCIDENCIA - PDFKit', {
                align: 'center',
                y: 60
            });
         
+        // Versión
+        doc.fontSize(8)
+           .font('Helvetica')
+           .fillColor('#666666')
+           .text('Generado con PDFKit - Sin HTML', {
+               align: 'center',
+               y: 85
+           });
+        
         // Línea decorativa
-        doc.moveTo(80, 100)
-           .lineTo(520, 100)
+        doc.moveTo(80, 95)
+           .lineTo(520, 95)
            .lineWidth(2)
            .stroke('#2c5aa0');
         
-        // INFORMACIÓN BÁSICA - MEJOR INTERLINEADO
+        // INFORMACIÓN BÁSICA
+        let yPos = 120;
+        
         doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#000000')
-           .text('INFORMACIÓN BÁSICA', 50, 130);
+           .text('INFORMACIÓN BÁSICA', 50, yPos);
         
-        let yPos = 160;
+        yPos += 30;
         
-        // Configurar interlineado reducido
+        // Primera columna (datos limpios)
         doc.fontSize(11)
-           .font('Helvetica')
-           .lineGap(4); // Interlineado compacto
-
-        // Primera columna
+           .font('Helvetica');
+        
         doc.text(`ID de Incidencia:`, 50, yPos);
         doc.font('Helvetica-Bold')
            .text(` ${incidencia.id}`, 170, yPos);
         
-        yPos += 18; // Reducido de 20
+        yPos += 20;
         doc.font('Helvetica')
            .text(`Título:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${incidencia.titulo}`, 170, yPos, { width: 250, lineGap: 0 });
+           .text(` ${limpiarTexto(incidencia.titulo)}`, 170, yPos, { 
+               width: 250,
+               lineGap: 2 
+           });
         
-        yPos += 18;
+        yPos += 20;
         doc.font('Helvetica')
            .text(`Planta:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${incidencia.plantaNombre}`, 170, yPos);
+           .text(` ${limpiarTexto(incidencia.plantaNombre)}`, 170, yPos);
         
-        yPos += 18;
+        yPos += 20;
         doc.font('Helvetica')
            .text(`Reportado por:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${incidencia.usuarioNombre}`, 170, yPos);
+           .text(` ${limpiarTexto(incidencia.usuarioNombre)}`, 170, yPos);
         
         // Segunda columna
-        let yPosCol2 = 160;
+        let yPosCol2 = 120 + 30;
         
         doc.font('Helvetica')
            .text(`Estado:`, 350, yPosCol2);
@@ -769,7 +824,7 @@ export const generarReportePDF = async (req, res) => {
            .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
            .text(` ${incidencia.estado.toUpperCase()}`, 400, yPosCol2);
         
-        yPosCol2 += 18;
+        yPosCol2 += 20;
         doc.fillColor('#000000')
            .font('Helvetica')
            .text(`Fecha de reporte:`, 350, yPosCol2);
@@ -777,374 +832,297 @@ export const generarReportePDF = async (req, res) => {
            .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 450, yPosCol2);
         
         if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosCol2 += 18;
+            yPosCol2 += 20;
             doc.font('Helvetica')
                .text(`Fecha de resolución:`, 350, yPosCol2);
             doc.font('Helvetica-Bold')
                .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 470, yPosCol2);
         }
         
-        yPos = Math.max(yPos, yPosCol2) + 25; // Espacio reducido
+        yPos = Math.max(yPos, yPosCol2) + 30;
         
-        // DESCRIPCIÓN DEL PROBLEMA
-        yPos = agregarPaginaSiNecesario(80);
+        // DESCRIPCIÓN DEL PROBLEMA (limpia)
+        yPos = verificarEspacio(60);
         
         doc.font('Helvetica-Bold')
            .fontSize(12)
-           .lineGap(4)
            .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPos);
         
-        yPos += 15; // Reducido de 20
+        yPos += 20;
         
         doc.font('Helvetica')
            .fontSize(10)
-           .text(incidencia.descripcion || 'Sin descripción', 50, yPos, { 
+           .text(limpiarTexto(incidencia.descripcion) || 'Sin descripción', 50, yPos, { 
                width: 500, 
                align: 'left',
-               lineGap: 3, // Interlineado más compacto
-               paragraphGap: 0
+               lineGap: 4
            });
         
-        // Calcular altura dinámica
-        const lineasDescripcion = Math.ceil(((incidencia.descripcion?.length || 0) / 85) || 1);
-        yPos += (lineasDescripcion * 10) + 15; // Altura reducida
+        const lineasDescripcion = Math.ceil((limpiarTexto(incidencia.descripcion)?.length || 0) / 85);
+        yPos += (lineasDescripcion * 12) + 25;
 
-        // RESUMEN DEL TRABAJO REALIZADO
+        // RESUMEN DEL TRABAJO REALIZADO (limpio)
         if (incidencia.resumenTrabajo) {
-            yPos = agregarPaginaSiNecesario(60);
+            yPos = verificarEspacio(60);
             
             doc.font('Helvetica-Bold')
                .fontSize(12)
                .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPos);
             
-            yPos += 15;
+            yPos += 20;
             
             doc.font('Helvetica')
                .fontSize(10)
-               .text(incidencia.resumenTrabajo, 50, yPos, { 
+               .text(limpiarTexto(incidencia.resumenTrabajo), 50, yPos, { 
                    width: 500, 
                    align: 'left',
-                   lineGap: 3,
-                   paragraphGap: 0
+                   lineGap: 4
                });
-            
-            const lineasResumen = Math.ceil(((incidencia.resumenTrabajo?.length || 0) / 85) || 1);
-            yPos += (lineasResumen * 10) + 20;
         }
 
         // =========== FOTOS ANTES DEL TRABAJO ===========
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         if (fotosAntes.length > 0) {
-            // Solo agregar página si necesitamos espacio para al menos una foto
-            yPos = agregarPaginaSiNecesario(300);
-            
-            // Si estamos en una nueva página, ajustar posición Y
-            if (doc.y <= 100) {
-                yPos = 50;
-            }
+            doc.addPage();
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('FOTOS ANTES DEL TRABAJO', 50, yPos, { align: 'center' });
+               .text('FOTOS ANTES DEL TRABAJO', 50, 50, { align: 'center' });
             
-            yPos += 25;
+            let fotoY = 80;
             
             fotosAntes.forEach((foto, index) => {
-                // Verificar si hay espacio para la foto completa
-                if (yPos > 650) {
+                if (fotoY > 650) {
                     doc.addPage();
-                    yPos = 50;
+                    fotoY = 50;
                     doc.fontSize(16)
                        .font('Helvetica-Bold')
                        .fillColor('#2c5aa0')
-                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, yPos, { align: 'center' });
-                    yPos += 25;
+                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
                 }
                 
-                // Título de la foto
+                // Título de la foto (limpio)
                 doc.fontSize(10)
                    .font('Helvetica-Bold')
                    .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPos);
+                   .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, fotoY);
                 
-                yPos += 12;
+                fotoY += 15;
                 
                 // PROCESAR IMAGEN
                 try {
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        const primerosBytes = foto.datos_imagen.slice(0, 4).toString('hex').toUpperCase();
-                        
-                        if (primerosBytes.startsWith('FFD8') || 
-                            primerosBytes === '89504E47' || 
-                            primerosBytes.startsWith('474946')) {
-                            
-                            doc.image(foto.datos_imagen, 50, yPos, { 
-                                width: 400,
-                                height: 250,
-                                fit: [400, 250],
-                                align: 'center'
-                            });
-                            yPos += 255;
-                            
-                        } else {
-                            // Placeholder para formato no soportado
-                            doc.rect(50, yPos, 400, 250)
-                               .fill('#f5f5f5')
-                               .stroke('#cccccc');
-                            
-                            doc.fontSize(10)
-                               .font('Helvetica')
-                               .fillColor('#666666')
-                               .text('Formato de imagen no soportado', 150, yPos + 120);
-                            
-                            yPos += 255;
-                        }
-                        
+                        doc.image(foto.datos_imagen, 50, fotoY, { 
+                            width: 400,
+                            height: 250,
+                            fit: [400, 250],
+                            align: 'center'
+                        });
+                        fotoY += 260;
                     } else {
-                        // Placeholder para sin datos
-                        doc.rect(50, yPos, 400, 250)
+                        // Placeholder
+                        doc.rect(50, fotoY, 400, 250)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
                         
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#666666')
-                           .text('Imagen no disponible', 180, yPos + 120);
+                           .text('Imagen no disponible', 180, fotoY + 120);
                         
-                        yPos += 255;
+                        fotoY += 260;
                     }
                     
                 } catch (imageError) {
-                    console.log('❌ [PDF IMAGE DEBUG] Error al procesar imagen:', imageError.message);
-                    
-                    doc.rect(50, yPos, 400, 250)
-                       .fill('#ffe6e6')
-                       .stroke('#ff9999');
-                    
-                    doc.fontSize(10)
-                       .font('Helvetica')
-                       .fillColor('#ff0000')
-                       .text('Error al cargar imagen', 160, yPos + 120);
-                    
-                    yPos += 255;
+                    console.log('❌ Error al procesar imagen:', imageError.message);
+                    fotoY += 260;
                 }
                 
-                yPos += 15; // Espacio entre fotos
+                fotoY += 20;
             });
         }
-        // NO agregar página si no hay fotos - eliminar esa sección
 
         // =========== FOTOS DESPUÉS DEL TRABAJO ===========
         const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         if (fotosDespues.length > 0) {
-            // Solo agregar página si no hay espacio suficiente
-            yPos = agregarPaginaSiNecesario(300);
-            
-            if (doc.y <= 100) {
-                yPos = 50;
-            }
+            doc.addPage();
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('FOTOS DESPUÉS DEL TRABAJO', 50, yPos, { align: 'center' });
+               .text('FOTOS DESPUÉS DEL TRABAJO', 50, 50, { align: 'center' });
             
-            yPos += 25;
+            let fotoY = 80;
             
             fotosDespues.forEach((foto, index) => {
-                if (yPos > 650) {
+                if (fotoY > 650) {
                     doc.addPage();
-                    yPos = 50;
+                    fotoY = 50;
                     doc.fontSize(16)
                        .font('Helvetica-Bold')
                        .fillColor('#2c5aa0')
-                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, yPos, { align: 'center' });
-                    yPos += 25;
+                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
                 }
                 
                 doc.fontSize(10)
                    .font('Helvetica-Bold')
                    .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${foto.descripcion || 'Sin descripción'}`, 50, yPos);
+                   .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, fotoY);
                 
-                yPos += 12;
+                fotoY += 15;
                 
                 try {
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        doc.image(foto.datos_imagen, 50, yPos, { 
+                        doc.image(foto.datos_imagen, 50, fotoY, { 
                             width: 400,
                             height: 250,
                             fit: [400, 250]
                         });
-                        yPos += 255;
+                        fotoY += 260;
                     } else {
-                        doc.rect(50, yPos, 400, 250)
+                        doc.rect(50, fotoY, 400, 250)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
                         
                         doc.fontSize(10)
                            .font('Helvetica')
                            .fillColor('#666666')
-                           .text('Imagen no disponible', 180, yPos + 120);
+                           .text('Imagen no disponible', 180, fotoY + 120);
                         
-                        yPos += 255;
+                        fotoY += 260;
                     }
                 } catch (imageError) {
                     console.log('❌ Error al cargar imagen "después":', imageError);
-                    yPos += 255;
+                    fotoY += 260;
                 }
                 
-                yPos += 15;
+                fotoY += 20;
             });
         }
 
         // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
-            // Calcular altura necesaria para la tabla
-            const alturaTabla = 40 + (incidencia.materiales.length * 18);
-            yPos = agregarPaginaSiNecesario(alturaTabla);
-            
-            if (doc.y <= 100) {
-                yPos = 50;
-            }
+            doc.addPage();
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('MATERIALES UTILIZADOS', 50, yPos, { align: 'center' });
+               .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
             
-            yPos += 30;
+            let materialY = 80;
             
             // Encabezados de tabla
-            doc.rect(50, yPos, 500, 18)
+            doc.rect(50, materialY, 500, 20)
                .fill('#f0f0f0')
                .stroke('#cccccc');
             
             doc.font('Helvetica-Bold')
                .fontSize(10)
                .fillColor('#000000')
-               .text('Material', 55, yPos + 4)
-               .text('Cantidad', 250, yPos + 4)
-               .text('Costo Unitario', 350, yPos + 4)
-               .text('Subtotal', 450, yPos + 4);
+               .text('Material', 55, materialY + 5)
+               .text('Cantidad', 250, materialY + 5)
+               .text('Costo Unitario', 350, materialY + 5)
+               .text('Subtotal', 450, materialY + 5);
             
-            yPos += 22;
+            materialY += 25;
             let totalCosto = 0;
             
-            // Filas de materiales
+            // Filas de materiales (LIMPIAS)
             doc.font('Helvetica')
                .fontSize(9);
                
             incidencia.materiales.forEach((material, index) => {
                 // Alternar colores de fila
                 if (index % 2 === 0) {
-                    doc.rect(50, yPos - 2, 500, 16)
+                    doc.rect(50, materialY - 2, 500, 18)
                        .fill('#fafafa');
                 }
                 
-                const materialNombre = material.materialNombre || material.material_nombre || material.nombre || 'Sin nombre';
+                // LIMPIAR todos los campos de texto
+                const materialNombre = limpiarTexto(
+                    material.materialNombre || 
+                    material.material_nombre || 
+                    material.nombre || 
+                    'Sin nombre'
+                );
+                
                 const cantidad = parseFloat(material.cantidad) || 0;
                 const costoUnitario = parseFloat(material.costo) || 0;
                 const subtotal = cantidad * costoUnitario;
                 totalCosto += subtotal;
                 
+                // Mostrar campos limpios
                 doc.fillColor('#000000')
-                   .text(materialNombre, 55, yPos, { width: 180 })
-                   .text(`${cantidad} ${material.unidad || 'unidad'}`, 250, yPos)
-                   .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, yPos)
-                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, yPos);
+                   .text(materialNombre, 55, materialY, { width: 180 })
+                   .text(`${cantidad} ${limpiarTexto(material.unidad) || 'unidad'}`, 250, materialY)
+                   .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, materialY)
+                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
                 
-                yPos += 16;
+                materialY += 18;
             });
 
             // Total
-            yPos += 8;
-            doc.moveTo(50, yPos).lineTo(550, yPos).stroke();
-            yPos += 12;
+            materialY += 10;
+            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
+            materialY += 15;
             
             doc.font('Helvetica-Bold')
                .fontSize(11)
                .fillColor('#2c5aa0')
-               .text('TOTAL:', 350, yPos)
-               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, yPos);
+               .text('TOTAL:', 350, materialY)
+               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
         }
-        // NO agregar página si no hay materiales
 
-        // =========== RESUMEN ESTADÍSTICO Y FIRMA ===========
-        // Calcular altura necesaria
-        const alturaResumen = 150;
-        yPos = agregarPaginaSiNecesario(alturaResumen);
+        // =========== PÁGINA FINAL CON RESUMEN Y FIRMA ===========
+        doc.addPage();
         
-        if (doc.y <= 100) {
-            yPos = 50;
-        }
+        // RESUMEN ESTADÍSTICO
+        doc.fontSize(16)
+           .font('Helvetica-Bold')
+           .fillColor('#2c5aa0')
+           .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
         
-        // Solo agregar título si estamos en una posición alta
-        if (yPos <= 100) {
-            doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('RESUMEN ESTADÍSTICO', 50, yPos, { align: 'center' });
-            yPos += 40;
-        } else {
-            doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('RESUMEN', 50, yPos);
-            yPos += 25;
-        }
-        
-        doc.fontSize(11)
+        let statsY = 100;
+        doc.fontSize(12)
            .font('Helvetica')
-           .fillColor('#000000')
-           .lineGap(3);
+           .fillColor('#000000');
         
-        const bullet = '• ';
-        const bulletWidth = 10;
+        doc.text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, statsY);
         
-        doc.text(bullet, 50, yPos);
-        doc.text(`Total de fotos (antes): ${fotosAntes.length}`, 50 + bulletWidth, yPos);
+        statsY += 25;
+        doc.text(`• Total de fotos (después): ${fotosDespues.length}`, 50, statsY);
         
-        yPos += 20;
-        doc.text(bullet, 50, yPos);
-        doc.text(`Total de fotos (después): ${fotosDespues.length}`, 50 + bulletWidth, yPos);
-        
-        yPos += 20;
-        doc.text(bullet, 50, yPos);
-        doc.text(`Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50 + bulletWidth, yPos);
+        statsY += 25;
+        doc.text(`• Total de materiales utilizados: ${incidencia.materiales?.length || 0}`, 50, statsY);
         
         if (incidencia.materiales && incidencia.materiales.length > 0) {
             const costoTotal = incidencia.materiales.reduce((total, material) => 
                 total + ((parseFloat(material.cantidad) || 0) * (parseFloat(material.costo) || 0)), 0
             );
-            yPos += 20;
-            doc.text(bullet, 50, yPos);
-            doc.text(`Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50 + bulletWidth, yPos);
+            statsY += 25;
+            doc.text(`• Costo total en materiales: $${costoTotal.toLocaleString('es-CL')}`, 50, statsY);
         }
         
         if (incidencia.fechaReporte && incidencia.fechaResolucion) {
-            yPos += 20;
-            doc.text(bullet, 50, yPos);
-            doc.text(`Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50 + bulletWidth, yPos);
+            statsY += 25;
+            doc.text(`• Tiempo total de resolución: ${calcularTiempoResolucion(incidencia)}`, 50, statsY);
         }
 
-        // FIRMA Y FECHA - solo si hay espacio
-        if (yPos < 650) {
-            yPos += 40;
-            
-            doc.font('Helvetica-Bold')
-               .fontSize(12)
-               .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, yPos);
-            
-            doc.moveTo(50, yPos + 25).lineTo(250, yPos + 25).stroke();
-            
-            doc.font('Helvetica')
-               .fontSize(10)
-               .fillColor('#666666')
-               .text(`Documento generado el: ${new Date().toLocaleDateString('es-ES')}`, 
-                     50, yPos + 40);
-        }
+        // FIRMA Y FECHA
+        const firmaY = statsY + 60;
+        
+        doc.font('Helvetica-Bold')
+           .fontSize(12)
+           .text('FIRMA DEL TÉCNICO RESPONSABLE', 50, firmaY);
+        
+        doc.moveTo(50, firmaY + 30).lineTo(250, firmaY + 30).stroke();
+        
+        doc.font('Helvetica')
+           .fontSize(10)
+           .fillColor('#666666')
+           .text(`Documento generado el: ${new Date().toLocaleDateString('es-ES')}`, 
+                 50, firmaY + 50);
 
         // FOOTER CON NÚMERO DE PÁGINA
         const pages = doc.bufferedPageRange();
@@ -1163,11 +1141,11 @@ export const generarReportePDF = async (req, res) => {
 
         // FINALIZAR DOCUMENTO
         doc.end();
-        console.log(`✅ [PDF DEBUG] PDF generado exitosamente - ${pages.count} páginas`);
+        console.log('✅ [PDF] PDF generado exitosamente - Datos limpios de HTML');
 
     } catch (error) {
-        console.log('❌ [PDF DEBUG] ERROR CAPTURADO:', error);
-        console.log('❌ [PDF DEBUG] Stack:', error.stack);
+        console.log('❌ [PDF] ERROR:', error);
+        console.log('❌ [PDF] Stack:', error.stack);
         
         if (!res.headersSent) {
             res.status(500).json({
@@ -1178,7 +1156,7 @@ export const generarReportePDF = async (req, res) => {
     }
 };
 
-// Función auxiliar para calcular tiempo de resolución
+// Función auxiliar para calcular tiempo de resolución (mantener igual)
 function calcularTiempoResolucion(incidencia) {
     if (!incidencia.fechaReporte || !incidencia.fechaResolucion) return 'N/A';
     
