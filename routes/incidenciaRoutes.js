@@ -18,27 +18,40 @@ import {
     eliminarMaterial
 } from "../controllers/incidenciaController.js";
 import { verificarToken, verificarRol } from "../middlewares/verificarToken.js";
+import { filtrarPlantasPorRol } from "../middlewares/verificarPlantaRol.js";
 import { 
-    filtrarPlantasPorRol 
-} from "../middlewares/verificarPlantaRol.js";
-import { uploadMultiple } from "../middlewares/upload.js";
-import { uploadCorsMiddleware } from "../middlewares/corsUpload.js";
+    uploadCorsMiddleware, 
+    uploadMultiple, 
+    handleMulterError,
+    preflightMiddleware 
+} from "../middlewares/corsUpload.js";
 
 const router = express.Router();
 
 // Todas las rutas requieren autenticación
 router.use(verificarToken);
 
-// ==================== RUTAS DE SUBIDA DE FOTOS ====================
-// PREFLIGHT primero para fotos
+// ==================== RUTAS DE SUBIDA DE FOTOS - ORDEN CRÍTICO ====================
+// OPTIONS para preflight de fotos
 router.options("/:id/fotos", uploadCorsMiddleware);
 
+// POST para subir fotos - ESTE ORDEN ES ESENCIAL
 router.post("/:id/fotos", 
-    uploadCorsMiddleware, // ✅ CORS específico para uploads
-    verificarRol(['admin', 'tecnico']), 
-    filtrarPlantasPorRol(),
-    uploadMultiple,
-    subirFotos
+    uploadCorsMiddleware,           // 1. CORS PRIMERO (configura headers)
+    verificarRol(['admin', 'tecnico']), // 2. Verificar permisos
+    filtrarPlantasPorRol(),         // 3. Verificar acceso a planta
+    (req, res, next) => {           // 4. Multer como función middleware
+        console.log('📤 [MULTER] Procesando archivos...');
+        uploadMultiple(req, res, (err) => {
+            if (err) {
+                console.log('❌ [MULTER] Error:', err.message);
+                return handleMulterError(err, req, res, next);
+            }
+            console.log(`✅ [MULTER] Archivos procesados: ${req.files?.length || 0}`);
+            next();
+        });
+    },
+    subirFotos                      // 5. Controlador final
 );
 
 // ==================== RUTAS DE REPORTE PDF ====================
@@ -130,42 +143,74 @@ router.get("/resumen/dashboard",
     obtenerIncidenciasResumen
 );
 
-// ==================== RUTA DE PRUEBA DE CORS ====================
+// ==================== RUTAS DE PRUEBA Y DIAGNÓSTICO ====================
 router.get("/test/cors", uploadCorsMiddleware, (req, res) => {
     res.json({
         success: true,
         message: "CORS test successful",
+        timestamp: new Date().toISOString(),
+        origin: req.headers.origin,
         headers: {
-            origin: req.headers.origin,
             'access-control-allow-origin': res.get('Access-Control-Allow-Origin'),
-            'access-control-allow-credentials': res.get('Access-Control-Allow-Credentials'),
-            timestamp: new Date().toISOString()
+            'access-control-allow-credentials': res.get('Access-Control-Allow-Credentials')
         }
     });
 });
 
-// Ruta OPTIONS general para el resto de rutas
+// Ruta para probar multer sin autenticación estricta
+router.post("/test/upload", 
+    uploadCorsMiddleware,
+    (req, res, next) => {
+        console.log('📤 [TEST MULTER] Procesando archivos de prueba...');
+        uploadMultiple(req, res, (err) => {
+            if (err) {
+                console.log('❌ [TEST MULTER] Error:', err.message);
+                return res.status(400).json({
+                    success: false,
+                    message: `Error en test: ${err.message}`
+                });
+            }
+            console.log(`✅ [TEST MULTER] Archivos recibidos: ${req.files?.length || 0}`);
+            res.json({
+                success: true,
+                message: "Upload test successful",
+                files: req.files?.map(f => ({
+                    name: f.originalname,
+                    size: f.size,
+                    mimetype: f.mimetype
+                })) || []
+            });
+        });
+    }
+);
+
+// Ruta OPTIONS general para todas las demás rutas
 router.options("*", (req, res) => {
-    const origin = req.headers.origin;
+    console.log('🛫 [GLOBAL OPTIONS] Preflight para:', req.path);
+    
     const allowedOrigins = [
         'https://www.infraexpert.cl',
         'https://infraexpert.cl',
         'http://infraexpert.cl',
         'http://localhost:3000',
         'http://localhost:5173',
-        'http://localhost:8080',
         'https://api.infraexpert.cl'
     ];
     
+    const origin = req.headers.origin;
+    
     if (origin && allowedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Origin', origin);
     }
     
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-auth-token');
     
     return res.status(200).end();
 });
+
+// Manejador de errores específico para multer
+router.use(handleMulterError);
 
 export default router;
