@@ -752,294 +752,319 @@ export const generarReportePDF = async (req, res) => {
 
         // =========== PÁGINA 1: INFORMACIÓN BÁSICA ===========
         
-        // TÍTULO PRINCIPAL (con marca de versión)
+        // TÍTULO PRINCIPAL
         doc.fontSize(24)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('REPORTE DE INCIDENCIA - PDFKit', {
+           .text('REPORTE DE INCIDENCIA', {
                align: 'center',
                y: 60
            });
         
-        // Versión
-        doc.fontSize(8)
-           .font('Helvetica')
-           .fillColor('#666666')
-           .text('Generado con PDFKit - Sin HTML', {
-               align: 'center',
-               y: 85
-           });
-        
         // Línea decorativa
-        doc.moveTo(80, 95)
-           .lineTo(520, 95)
+        doc.moveTo(80, 85)
+           .lineTo(520, 85)
            .lineWidth(2)
            .stroke('#2c5aa0');
         
         // INFORMACIÓN BÁSICA
-        let yPos = 120;
+        let yPos = 110;
         
-        doc.fontSize(14)
+        doc.fontSize(16)
            .font('Helvetica-Bold')
            .fillColor('#000000')
            .text('INFORMACIÓN BÁSICA', 50, yPos);
         
         yPos += 30;
         
-        // Primera columna (datos limpios)
+        // Primera columna
         doc.fontSize(11)
            .font('Helvetica');
         
         doc.text(`ID de Incidencia:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${incidencia.id}`, 170, yPos);
+           .text(` ${incidencia.id}`, 150, yPos);
         
-        yPos += 20;
+        yPos += 22;
         doc.font('Helvetica')
            .text(`Título:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${limpiarTexto(incidencia.titulo)}`, 170, yPos, { 
-               width: 250,
-               lineGap: 2 
+           .text(` ${limpiarTexto(incidencia.titulo)}`, 150, yPos, { 
+               width: 220,
+               lineGap: 3 
            });
         
-        yPos += 20;
+        // Calcular altura del título para ajustar posición
+        const tituloAltura = Math.ceil(limpiarTexto(incidencia.titulo).length / 40) * 14;
+        yPos += Math.max(tituloAltura, 22);
+        
         doc.font('Helvetica')
            .text(`Planta:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${limpiarTexto(incidencia.plantaNombre)}`, 170, yPos);
+           .text(` ${limpiarTexto(incidencia.plantaNombre)}`, 150, yPos);
         
-        yPos += 20;
+        yPos += 22;
         doc.font('Helvetica')
            .text(`Reportado por:`, 50, yPos);
         doc.font('Helvetica-Bold')
-           .text(` ${limpiarTexto(incidencia.usuarioNombre)}`, 170, yPos);
+           .text(` ${limpiarTexto(incidencia.usuarioNombre)}`, 150, yPos);
         
         // Segunda columna
-        let yPosCol2 = 120 + 30;
+        let yPosCol2 = 110 + 30;
         
         doc.font('Helvetica')
            .text(`Estado:`, 350, yPosCol2);
         doc.font('Helvetica-Bold')
            .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
-           .text(` ${incidencia.estado.toUpperCase()}`, 400, yPosCol2);
+           .text(` ${incidencia.estado.toUpperCase()}`, 410, yPosCol2);
         
-        yPosCol2 += 20;
+        yPosCol2 += 22;
         doc.fillColor('#000000')
            .font('Helvetica')
            .text(`Fecha de reporte:`, 350, yPosCol2);
         doc.font('Helvetica-Bold')
-           .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 450, yPosCol2);
+           .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 460, yPosCol2);
         
         if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosCol2 += 20;
+            yPosCol2 += 22;
             doc.font('Helvetica')
                .text(`Fecha de resolución:`, 350, yPosCol2);
             doc.font('Helvetica-Bold')
-               .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 470, yPosCol2);
+               .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 480, yPosCol2);
         }
         
-        yPos = Math.max(yPos, yPosCol2) + 30;
+        yPos = Math.max(yPos, yPosCol2) + 35;
         
-        // DESCRIPCIÓN DEL PROBLEMA (limpia)
-        yPos = verificarEspacio(60);
+        // DESCRIPCIÓN DEL PROBLEMA - CON MÁS ESPACIO
+        yPos = verificarEspacio(80);
         
         doc.font('Helvetica-Bold')
-           .fontSize(12)
+           .fontSize(14)
+           .fillColor('#2c5aa0')
            .text('DESCRIPCIÓN DEL PROBLEMA:', 50, yPos);
         
-        yPos += 20;
+        yPos += 25;
         
         doc.font('Helvetica')
-           .fontSize(10)
+           .fontSize(11)
+           .fillColor('#333333')
            .text(limpiarTexto(incidencia.descripcion) || 'Sin descripción', 50, yPos, { 
                width: 500, 
                align: 'left',
-               lineGap: 4
+               lineGap: 6,
+               paragraphGap: 10
            });
         
-        const lineasDescripcion = Math.ceil((limpiarTexto(incidencia.descripcion)?.length || 0) / 85);
-        yPos += (lineasDescripcion * 12) + 25;
+        // Calcular altura dinámica para descripción
+        const descripcionTexto = limpiarTexto(incidencia.descripcion) || '';
+        const lineasDescripcion = Math.ceil(descripcionTexto.length / 70);
+        yPos += (lineasDescripcion * 16) + 40;
 
-        // RESUMEN DEL TRABAJO REALIZADO (limpio)
+        // RESUMEN DEL TRABAJO REALIZADO
         if (incidencia.resumenTrabajo) {
-            yPos = verificarEspacio(60);
+            yPos = verificarEspacio(80);
             
             doc.font('Helvetica-Bold')
-               .fontSize(12)
+               .fontSize(14)
+               .fillColor('#2c5aa0')
                .text('RESUMEN DEL TRABAJO REALIZADO:', 50, yPos);
             
-            yPos += 20;
+            yPos += 25;
             
             doc.font('Helvetica')
-               .fontSize(10)
+               .fontSize(11)
+               .fillColor('#333333')
                .text(limpiarTexto(incidencia.resumenTrabajo), 50, yPos, { 
                    width: 500, 
                    align: 'left',
-                   lineGap: 4
+                   lineGap: 6,
+                   paragraphGap: 10
                });
+            
+            const resumenTexto = limpiarTexto(incidencia.resumenTrabajo);
+            const lineasResumen = Math.ceil(resumenTexto.length / 70);
+            yPos += (lineasResumen * 16) + 30;
         }
 
         // =========== FOTOS ANTES DEL TRABAJO ===========
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
-        if (fotosAntes.length > 0) {
+        const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
+        
+        // Solo agregar página para fotos si hay fotos
+        if (fotosAntes.length > 0 || fotosDespues.length > 0) {
             doc.addPage();
             
-            doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('FOTOS ANTES DEL TRABAJO', 50, 50, { align: 'center' });
+            let currentPageY = 50;
             
-            let fotoY = 80;
-            
-            fotosAntes.forEach((foto, index) => {
-                if (fotoY > 650) {
-                    doc.addPage();
-                    fotoY = 50;
-                    doc.fontSize(16)
-                       .font('Helvetica-Bold')
-                       .fillColor('#2c5aa0')
-                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
-                }
-                
-                // Título de la foto (limpio)
-                doc.fontSize(10)
+            // FOTOS ANTES
+            if (fotosAntes.length > 0) {
+                doc.fontSize(16)
                    .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, fotoY);
+                   .fillColor('#2c5aa0')
+                   .text('FOTOS ANTES DEL TRABAJO', 50, currentPageY, { align: 'center' });
                 
-                fotoY += 15;
+                currentPageY += 30;
                 
-                // PROCESAR IMAGEN
-                try {
-                    if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        doc.image(foto.datos_imagen, 50, fotoY, { 
-                            width: 400,
-                            height: 250,
-                            fit: [400, 250],
-                            align: 'center'
-                        });
-                        fotoY += 260;
-                    } else {
-                        // Placeholder
-                        doc.rect(50, fotoY, 400, 250)
-                           .fill('#f5f5f5')
-                           .stroke('#cccccc');
-                        
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#666666')
-                           .text('Imagen no disponible', 180, fotoY + 120);
-                        
-                        fotoY += 260;
+                fotosAntes.forEach((foto, index) => {
+                    // Verificar si necesitamos nueva página
+                    if (currentPageY > 700) {
+                        doc.addPage();
+                        currentPageY = 50;
+                        doc.fontSize(16)
+                           .font('Helvetica-Bold')
+                           .fillColor('#2c5aa0')
+                           .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, currentPageY, { align: 'center' });
+                        currentPageY += 30;
                     }
                     
-                } catch (imageError) {
-                    console.log('❌ Error al procesar imagen:', imageError.message);
-                    fotoY += 260;
-                }
-                
-                fotoY += 20;
-            });
-        }
-
-        // =========== FOTOS DESPUÉS DEL TRABAJO ===========
-        const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
-        if (fotosDespues.length > 0) {
-            doc.addPage();
-            
-            doc.fontSize(16)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('FOTOS DESPUÉS DEL TRABAJO', 50, 50, { align: 'center' });
-            
-            let fotoY = 80;
-            
-            fotosDespues.forEach((foto, index) => {
-                if (fotoY > 650) {
-                    doc.addPage();
-                    fotoY = 50;
-                    doc.fontSize(16)
+                    // Título de la foto
+                    doc.fontSize(11)
                        .font('Helvetica-Bold')
-                       .fillColor('#2c5aa0')
-                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, 50, { align: 'center' });
-                }
-                
-                doc.fontSize(10)
-                   .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, fotoY);
-                
-                fotoY += 15;
-                
-                try {
-                    if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        doc.image(foto.datos_imagen, 50, fotoY, { 
-                            width: 400,
-                            height: 250,
-                            fit: [400, 250]
-                        });
-                        fotoY += 260;
-                    } else {
-                        doc.rect(50, fotoY, 400, 250)
-                           .fill('#f5f5f5')
-                           .stroke('#cccccc');
-                        
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#666666')
-                           .text('Imagen no disponible', 180, fotoY + 120);
-                        
-                        fotoY += 260;
+                       .fillColor('#000000')
+                       .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, currentPageY);
+                    
+                    currentPageY += 18;
+                    
+                    // Procesar imagen
+                    try {
+                        if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
+                            doc.image(foto.datos_imagen, 50, currentPageY, { 
+                                width: 400,
+                                height: 250,
+                                fit: [400, 250],
+                                align: 'center'
+                            });
+                            currentPageY += 260;
+                        } else {
+                            // Placeholder si no hay imagen
+                            doc.rect(50, currentPageY, 400, 250)
+                               .fill('#f5f5f5')
+                               .stroke('#cccccc');
+                            
+                            doc.fontSize(10)
+                               .font('Helvetica')
+                               .fillColor('#666666')
+                               .text('Imagen no disponible', 180, currentPageY + 120);
+                            
+                            currentPageY += 260;
+                        }
+                    } catch (imageError) {
+                        console.log('❌ Error al procesar imagen:', imageError.message);
+                        currentPageY += 260;
                     }
-                } catch (imageError) {
-                    console.log('❌ Error al cargar imagen "después":', imageError);
-                    fotoY += 260;
+                    
+                    currentPageY += 25;
+                });
+                
+                // Espacio entre secciones de fotos
+                currentPageY += 20;
+            }
+            
+            // FOTOS DESPUÉS
+            if (fotosDespues.length > 0) {
+                // Verificar si necesitamos nueva página para fotos después
+                if (currentPageY > 500) {
+                    doc.addPage();
+                    currentPageY = 50;
                 }
                 
-                fotoY += 20;
-            });
+                doc.fontSize(16)
+                   .font('Helvetica-Bold')
+                   .fillColor('#2c5aa0')
+                   .text('FOTOS DESPUÉS DEL TRABAJO', 50, currentPageY, { align: 'center' });
+                
+                currentPageY += 30;
+                
+                fotosDespues.forEach((foto, index) => {
+                    if (currentPageY > 700) {
+                        doc.addPage();
+                        currentPageY = 50;
+                        doc.fontSize(16)
+                           .font('Helvetica-Bold')
+                           .fillColor('#2c5aa0')
+                           .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, currentPageY, { align: 'center' });
+                        currentPageY += 30;
+                    }
+                    
+                    doc.fontSize(11)
+                       .font('Helvetica-Bold')
+                       .fillColor('#000000')
+                       .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, currentPageY);
+                    
+                    currentPageY += 18;
+                    
+                    try {
+                        if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
+                            doc.image(foto.datos_imagen, 50, currentPageY, { 
+                                width: 400,
+                                height: 250,
+                                fit: [400, 250]
+                            });
+                            currentPageY += 260;
+                        } else {
+                            doc.rect(50, currentPageY, 400, 250)
+                               .fill('#f5f5f5')
+                               .stroke('#cccccc');
+                            
+                            doc.fontSize(10)
+                               .font('Helvetica')
+                               .fillColor('#666666')
+                               .text('Imagen no disponible', 180, currentPageY + 120);
+                            
+                            currentPageY += 260;
+                        }
+                    } catch (imageError) {
+                        console.log('❌ Error al cargar imagen "después":', imageError);
+                        currentPageY += 260;
+                    }
+                    
+                    currentPageY += 25;
+                });
+            }
         }
 
         // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
-            doc.addPage();
+            // Solo agregar página nueva si ya estamos cerca del final
+            if (doc.y > 600) {
+                doc.addPage();
+            }
             
             doc.fontSize(16)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('MATERIALES UTILIZADOS', 50, 50, { align: 'center' });
+               .text('MATERIALES UTILIZADOS', 50, doc.y + 20, { align: 'center' });
             
-            let materialY = 80;
+            let materialY = doc.y + 50;
             
             // Encabezados de tabla
-            doc.rect(50, materialY, 500, 20)
+            doc.rect(50, materialY, 500, 25)
                .fill('#f0f0f0')
                .stroke('#cccccc');
             
             doc.font('Helvetica-Bold')
-               .fontSize(10)
+               .fontSize(11)
                .fillColor('#000000')
-               .text('Material', 55, materialY + 5)
-               .text('Cantidad', 250, materialY + 5)
-               .text('Costo Unitario', 350, materialY + 5)
-               .text('Subtotal', 450, materialY + 5);
+               .text('Material', 55, materialY + 8)
+               .text('Cantidad', 250, materialY + 8)
+               .text('Costo Unitario', 350, materialY + 8)
+               .text('Subtotal', 450, materialY + 8);
             
-            materialY += 25;
+            materialY += 30;
             let totalCosto = 0;
             
-            // Filas de materiales (LIMPIAS)
+            // Filas de materiales
             doc.font('Helvetica')
-               .fontSize(9);
+               .fontSize(10);
                
             incidencia.materiales.forEach((material, index) => {
                 // Alternar colores de fila
                 if (index % 2 === 0) {
-                    doc.rect(50, materialY - 2, 500, 18)
+                    doc.rect(50, materialY - 5, 500, 20)
                        .fill('#fafafa');
                 }
                 
-                // LIMPIAR todos los campos de texto
+                // Limpiar todos los campos
                 const materialNombre = limpiarTexto(
                     material.materialNombre || 
                     material.material_nombre || 
@@ -1054,36 +1079,39 @@ export const generarReportePDF = async (req, res) => {
                 
                 // Mostrar campos limpios
                 doc.fillColor('#000000')
-                   .text(materialNombre, 55, materialY, { width: 180 })
+                   .text(materialNombre.substring(0, 30), 55, materialY, { width: 180 })
                    .text(`${cantidad} ${limpiarTexto(material.unidad) || 'unidad'}`, 250, materialY)
                    .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, materialY)
                    .text(`$${subtotal.toLocaleString('es-CL')}`, 450, materialY);
                 
-                materialY += 18;
+                materialY += 20;
             });
 
             // Total
-            materialY += 10;
-            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
             materialY += 15;
+            doc.moveTo(50, materialY).lineTo(550, materialY).stroke();
+            materialY += 20;
             
             doc.font('Helvetica-Bold')
-               .fontSize(11)
+               .fontSize(12)
                .fillColor('#2c5aa0')
                .text('TOTAL:', 350, materialY)
                .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, materialY);
         }
 
         // =========== PÁGINA FINAL CON RESUMEN Y FIRMA ===========
-        doc.addPage();
+        // Solo agregar página final si ya estamos cerca del final
+        if (doc.y > 500) {
+            doc.addPage();
+        }
         
         // RESUMEN ESTADÍSTICO
         doc.fontSize(16)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('RESUMEN ESTADÍSTICO', 50, 50, { align: 'center' });
+           .text('RESUMEN ESTADÍSTICO', 50, doc.y + 20, { align: 'center' });
         
-        let statsY = 100;
+        let statsY = doc.y + 60;
         doc.fontSize(12)
            .font('Helvetica')
            .fillColor('#000000');
@@ -1134,14 +1162,14 @@ export const generarReportePDF = async (req, res) => {
                .fillColor('#999999')
                .text(
                    `Reporte Incidencia #${incidencia.id} - Página ${i + 1} de ${pages.count}`,
-                   50, 800,
+                   50, doc.page.height - 30,
                    { align: 'center' }
                );
         }
 
         // FINALIZAR DOCUMENTO
         doc.end();
-        console.log('✅ [PDF] PDF generado exitosamente - Datos limpios de HTML');
+        console.log('✅ [PDF] PDF generado exitosamente');
 
     } catch (error) {
         console.log('❌ [PDF] ERROR:', error);
@@ -1156,7 +1184,7 @@ export const generarReportePDF = async (req, res) => {
     }
 };
 
-// Función auxiliar para calcular tiempo de resolución (mantener igual)
+// Función auxiliar para calcular tiempo de resolución
 function calcularTiempoResolucion(incidencia) {
     if (!incidencia.fechaReporte || !incidencia.fechaResolucion) return 'N/A';
     
