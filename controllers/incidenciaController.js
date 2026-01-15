@@ -641,7 +641,7 @@ export const generarReportePDF = async (req, res) => {
         const { filtrosPlanta = {} } = req;
         
         console.log('🎯 [PDF] Generando PDF para incidencia:', id);
-        console.log('🔄 [PDF] VERSIÓN PERFECTA - Sin amontonamiento');
+        console.log('🔄 [PDF] VERSIÓN FINAL - Con nombre de materiales');
 
         // Obtener datos completos
         const incidencia = await Incidencia.buscarCompletaPorId(id);
@@ -667,6 +667,20 @@ export const generarReportePDF = async (req, res) => {
             limpio = limpio.replace(/\s+/g, ' ').trim();
             return limpio;
         };
+
+        // DEBUG: Verificar estructura de materiales
+        console.log('🔍 [DEBUG] Estructura de materiales recibida:');
+        if (incidencia.materiales && incidencia.materiales.length > 0) {
+            incidencia.materiales.forEach((mat, idx) => {
+                console.log(`  Material ${idx + 1}:`, {
+                    objeto_completo: mat,
+                    nombre_directo: mat.nombre,
+                    materialNombre: mat.materialNombre,
+                    material_nombre: mat.material_nombre,
+                    keys: Object.keys(mat)
+                });
+            });
+        }
 
         // Crear documento PDF
         const doc = new PDFDocument({ 
@@ -696,10 +710,9 @@ export const generarReportePDF = async (req, res) => {
            .lineWidth(1)
            .stroke('#2c5aa0');
         
-        // SECCIÓN: INFORMACIÓN BÁSICA - ESTRUCTURA MEJORADA
+        // SECCIÓN: INFORMACIÓN BÁSICA
         let yPos = 110;
         
-        // Título de sección
         doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#000000')
@@ -707,7 +720,7 @@ export const generarReportePDF = async (req, res) => {
         
         yPos += 30;
         
-        // PRIMERA FILA: ID y Estado (en la misma línea pero bien separados)
+        // PRIMERA FILA: ID y Estado
         doc.fontSize(10)
            .font('Helvetica')
            .fillColor('#666666')
@@ -717,7 +730,6 @@ export const generarReportePDF = async (req, res) => {
            .fillColor('#000000')
            .text(` ${incidencia.id}`, 150, yPos);
         
-        // Estado al lado derecho
         doc.font('Helvetica')
            .fillColor('#666666')
            .text('Estado:', 350, yPos);
@@ -741,7 +753,6 @@ export const generarReportePDF = async (req, res) => {
                lineGap: 3 
            });
         
-        // Calcular altura del título
         const tituloLineas = Math.ceil(tituloLimpio.length / 45);
         yPos += (tituloLineas * 14) + 10;
         
@@ -784,7 +795,7 @@ export const generarReportePDF = async (req, res) => {
         
         yPos += 35;
         
-        // DESCRIPCIÓN DEL PROBLEMA - CON ESPACIO SUFICIENTE
+        // DESCRIPCIÓN DEL PROBLEMA
         doc.font('Helvetica-Bold')
            .fontSize(12)
            .fillColor('#2c5aa0')
@@ -830,11 +841,9 @@ export const generarReportePDF = async (req, res) => {
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         
-        // FUNCIÓN PARA AGREGAR FOTOS (evita duplicación)
         const agregarFotos = (titulo, fotos) => {
             if (fotos.length === 0) return yPos;
             
-            // Verificar si necesitamos nueva página ANTES de empezar fotos
             if (yPos > 600) {
                 doc.addPage();
                 yPos = 50;
@@ -850,7 +859,6 @@ export const generarReportePDF = async (req, res) => {
             yPos += 25;
             
             fotos.forEach((foto, index) => {
-                // Verificar espacio ANTES de agregar cada foto
                 if (yPos > 650) {
                     doc.addPage();
                     yPos = 50;
@@ -861,7 +869,6 @@ export const generarReportePDF = async (req, res) => {
                     yPos += 25;
                 }
                 
-                // Título de la foto
                 doc.fontSize(10)
                    .font('Helvetica-Bold')
                    .fillColor('#000000')
@@ -869,7 +876,6 @@ export const generarReportePDF = async (req, res) => {
                 
                 yPos += 15;
                 
-                // Procesar imagen (solo una vez por foto)
                 try {
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
                         doc.image(foto.datos_imagen, 50, yPos, { 
@@ -879,7 +885,6 @@ export const generarReportePDF = async (req, res) => {
                         });
                         yPos += 210;
                     } else {
-                        // Placeholder si no hay imagen
                         doc.rect(50, yPos, 300, 200)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
@@ -902,19 +907,16 @@ export const generarReportePDF = async (req, res) => {
             return yPos;
         };
         
-        // Agregar fotos "antes" si existen
         if (fotosAntes.length > 0) {
             yPos = agregarFotos('FOTOS ANTES DEL TRABAJO', fotosAntes);
         }
         
-        // Agregar fotos "después" si existen
         if (fotosDespues.length > 0) {
             yPos = agregarFotos('FOTOS DESPUÉS DEL TRABAJO', fotosDespues);
         }
         
         // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
-            // Verificar espacio ANTES de agregar materiales
             if (yPos > 550) {
                 doc.addPage();
                 yPos = 50;
@@ -929,10 +931,7 @@ export const generarReportePDF = async (req, res) => {
             
             yPos += 30;
             
-            // Tabla de materiales
-            const startTableY = yPos;
-            
-            // Encabezados
+            // Encabezados de tabla
             doc.rect(50, yPos, 500, 25)
                .fill('#f0f0f0')
                .stroke('#cccccc');
@@ -948,26 +947,56 @@ export const generarReportePDF = async (req, res) => {
             yPos += 30;
             let totalCosto = 0;
             
-            // Filas
+            // CORRECCIÓN PRINCIPAL: Obtener nombre del material correctamente
             doc.font('Helvetica')
                .fontSize(9);
                
             incidencia.materiales.forEach((material, index) => {
-                // Alternar colores
+                // Alternar colores de fila
                 if (index % 2 === 0) {
                     doc.rect(50, yPos - 5, 500, 20)
                        .fill('#fafafa');
                 }
                 
-                const materialNombre = limpiarTexto(material.nombre || material.materialNombre || 'Sin nombre');
+                // OBTENER NOMBRE DEL MATERIAL - PROBANDO TODAS LAS POSIBILIDADES
+                let nombreMaterial = '';
+                
+                // Intentar diferentes propiedades en orden de prioridad
+                if (material.nombre && material.nombre.trim() !== '') {
+                    nombreMaterial = material.nombre;
+                } else if (material.materialNombre && material.materialNombre.trim() !== '') {
+                    nombreMaterial = material.materialNombre;
+                } else if (material.material_nombre && material.material_nombre.trim() !== '') {
+                    nombreMaterial = material.material_nombre;
+                } else if (material.descripcion && material.descripcion.trim() !== '') {
+                    nombreMaterial = material.descripcion;
+                } else if (material.Material && material.Material.nombre) {
+                    nombreMaterial = material.Material.nombre;
+                } else {
+                    nombreMaterial = 'Material sin nombre';
+                }
+                
+                // Limpiar el nombre
+                nombreMaterial = limpiarTexto(nombreMaterial);
+                
+                // Obtener cantidad y costo
                 const cantidad = parseFloat(material.cantidad) || 0;
                 const costoUnitario = parseFloat(material.costo) || 0;
                 const subtotal = cantidad * costoUnitario;
                 totalCosto += subtotal;
                 
+                // Obtener unidad
+                let unidad = 'unidad';
+                if (material.unidad && material.unidad.trim() !== '') {
+                    unidad = limpiarTexto(material.unidad);
+                } else if (material.unidad_medida && material.unidad_medida.trim() !== '') {
+                    unidad = limpiarTexto(material.unidad_medida);
+                }
+                
+                // Mostrar en la tabla
                 doc.fillColor('#000000')
-                   .text(materialNombre, 55, yPos, { width: 180 })
-                   .text(`${cantidad} ${limpiarTexto(material.unidad) || 'unidad'}`, 250, yPos)
+                   .text(nombreMaterial, 55, yPos, { width: 180 })
+                   .text(`${cantidad} ${unidad}`, 250, yPos)
                    .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, yPos)
                    .text(`$${subtotal.toLocaleString('es-CL')}`, 450, yPos);
                 
@@ -989,7 +1018,6 @@ export const generarReportePDF = async (req, res) => {
         }
         
         // =========== RESUMEN FINAL ===========
-        // Verificar espacio ANTES del resumen final
         if (yPos > 600) {
             doc.addPage();
             yPos = 50;
@@ -1008,7 +1036,6 @@ export const generarReportePDF = async (req, res) => {
            .font('Helvetica')
            .fillColor('#000000');
         
-        // CON ESPACIOS CORRECTOS entre los puntos
         doc.text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, yPos);
         yPos += 20;
         
@@ -1051,48 +1078,25 @@ export const generarReportePDF = async (req, res) => {
            .text(`Reporte generado el ${new Date().toLocaleDateString('es-ES')}`, 
                  50, yPos + 20);
 
-        // =========== FOOTER INTELIGENTE ===========
-        // SOLO agregar números de página si hay más de 1 página
+        // =========== FOOTER ===========
         const pages = doc.bufferedPageRange();
         
-        // Verificar si realmente necesitamos páginas adicionales
-        // Si la última posición Y es menor a la altura máxima, estamos bien
-        if (yPos < doc.page.height - 100) {
-            // Tenemos espacio en la última página, no hay páginas vacías
-            // Agregar números de página en el footer de CADA página
-            for (let i = 0; i < pages.count; i++) {
-                doc.switchToPage(i);
-                
-                // Número de página abajo a la derecha
-                doc.fontSize(8)
-                   .font('Helvetica')
-                   .fillColor('#999999')
-                   .text(
-                       `Página ${i + 1} de ${pages.count}`,
-                       doc.page.width - 100,
-                       doc.page.height - 40
-                   );
-            }
-        } else {
-            // Ya estamos cerca del final, no hacer nada especial
-            // Los números de página se agregarán normalmente
-            for (let i = 0; i < pages.count; i++) {
-                doc.switchToPage(i);
-                
-                doc.fontSize(8)
-                   .font('Helvetica')
-                   .fillColor('#999999')
-                   .text(
-                       `Página ${i + 1} de ${pages.count}`,
-                       doc.page.width - 100,
-                       doc.page.height - 40
-                   );
-            }
+        for (let i = 0; i < pages.count; i++) {
+            doc.switchToPage(i);
+            
+            doc.fontSize(8)
+               .font('Helvetica')
+               .fillColor('#999999')
+               .text(
+                   `Página ${i + 1} de ${pages.count}`,
+                   doc.page.width - 100,
+                   doc.page.height - 40
+               );
         }
 
         // FINALIZAR DOCUMENTO
         doc.end();
-        console.log('✅ [PDF] PDF PERFECTO generado - Sin amontonamiento, sin páginas vacías');
+        console.log('✅ [PDF] PDF PERFECTO generado - Con nombres de materiales');
 
     } catch (error) {
         console.log('❌ [PDF] ERROR:', error);
