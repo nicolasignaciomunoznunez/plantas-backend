@@ -641,7 +641,7 @@ export const generarReportePDF = async (req, res) => {
         const { filtrosPlanta = {} } = req;
         
         console.log('🎯 [PDF] Generando PDF para incidencia:', id);
-        console.log('🔄 [PDF] Usando controlador PDFKit corregido');
+        console.log('🔄 [PDF] VERSIÓN PERFECTA - Sin amontonamiento');
 
         // Obtener datos completos
         const incidencia = await Incidencia.buscarCompletaPorId(id);
@@ -663,39 +663,8 @@ export const generarReportePDF = async (req, res) => {
         const limpiarTexto = (texto) => {
             if (!texto || typeof texto !== 'string') return '';
             
-            // Remover todas las etiquetas HTML
             let limpio = texto.replace(/<[^>]*>/g, '');
-            
-            // Reemplazar entidades HTML comunes
-            const entidades = {
-                '&nbsp;': ' ',
-                '&amp;': '&',
-                '&lt;': '<',
-                '&gt;': '>',
-                '&quot;': '"',
-                '&#39;': "'",
-                '&#x27;': "'",
-                '&#x2F;': '/',
-                '&#xA0;': ' ',
-                '&euro;': '€',
-                '&copy;': '©',
-                '&reg;': '®',
-                '&trade;': '™',
-                '&pound;': '£',
-                '&yen;': '¥',
-                '&cent;': '¢'
-            };
-            
-            Object.keys(entidades).forEach(entidad => {
-                limpio = limpio.replace(new RegExp(entidad, 'gi'), entidades[entidad]);
-            });
-            
-            // Remover espacios múltiples y saltos de línea extras
             limpio = limpio.replace(/\s+/g, ' ').trim();
-            
-            // Limpiar caracteres especiales de moneda
-            limpio = limpio.replace(/\\\(/g, '').replace(/\\\)/g, '');
-            
             return limpio;
         };
 
@@ -706,25 +675,10 @@ export const generarReportePDF = async (req, res) => {
             bufferPages: true
         });
         
-        // Configurar headers para evitar caché
+        // Configurar headers
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=reporte-${id}-${Date.now()}.pdf`);
-        res.setHeader('X-PDF-Generator', 'PDFKit-Corregido');
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
+        res.setHeader('Content-Disposition', `attachment; filename=reporte-${id}.pdf`);
         
-        // Manejar errores del stream
-        doc.on('error', (error) => {
-            console.log('❌ [PDF ERROR] Error en PDF stream:', error);
-            if (!res.headersSent) {
-                res.status(500).json({
-                    success: false,
-                    message: 'Error generando PDF: ' + error.message
-                });
-            }
-        });
-
         // Pipe el PDF a la respuesta
         doc.pipe(res);
 
@@ -734,113 +688,103 @@ export const generarReportePDF = async (req, res) => {
         doc.fontSize(20)
            .font('Helvetica-Bold')
            .fillColor('#2c5aa0')
-           .text('REPORTE DE INCIDENCIA', {
-               align: 'center',
-               y: 50
-           });
+           .text('REPORTE DE INCIDENCIA', 50, 50, { align: 'center' });
         
         // Línea decorativa
-        doc.moveTo(70, 75)
-           .lineTo(530, 75)
+        doc.moveTo(70, 80)
+           .lineTo(530, 80)
            .lineWidth(1)
            .stroke('#2c5aa0');
         
-        // SECCIÓN: INFORMACIÓN BÁSICA
-        let yPos = 100;
+        // SECCIÓN: INFORMACIÓN BÁSICA - ESTRUCTURA MEJORADA
+        let yPos = 110;
         
+        // Título de sección
         doc.fontSize(14)
            .font('Helvetica-Bold')
            .fillColor('#000000')
            .text('INFORMACIÓN BÁSICA', 50, yPos);
         
-        yPos += 25;
+        yPos += 30;
         
-        // Diseño de dos columnas MEJORADO
-        const col1X = 50;
-        const col2X = 300;
-        
-        // Columna 1
+        // PRIMERA FILA: ID y Estado (en la misma línea pero bien separados)
         doc.fontSize(10)
            .font('Helvetica')
            .fillColor('#666666')
-           .text('ID de Incidencia:', col1X, yPos);
+           .text('ID de Incidencia:', 50, yPos);
         
         doc.font('Helvetica-Bold')
            .fillColor('#000000')
-           .text(` ${incidencia.id}`, col1X + 100, yPos);
+           .text(` ${incidencia.id}`, 150, yPos);
         
-        yPos += 18;
-        
+        // Estado al lado derecho
         doc.font('Helvetica')
            .fillColor('#666666')
-           .text('Título:', col1X, yPos);
+           .text('Estado:', 350, yPos);
+        
+        doc.font('Helvetica-Bold')
+           .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
+           .text(` ${incidencia.estado.toUpperCase()}`, 400, yPos);
+        
+        yPos += 22;
+        
+        // SEGUNDA FILA: Título
+        doc.font('Helvetica')
+           .fillColor('#666666')
+           .text('Título:', 50, yPos);
         
         const tituloLimpio = limpiarTexto(incidencia.titulo);
         doc.font('Helvetica-Bold')
            .fillColor('#000000')
-           .text(` ${tituloLimpio}`, col1X + 100, yPos, { 
-               width: 180,
+           .text(` ${tituloLimpio}`, 150, yPos, { 
+               width: 350,
                lineGap: 3 
            });
         
         // Calcular altura del título
-        const tituloLineas = Math.ceil(tituloLimpio.length / 25);
-        yPos += (tituloLineas * 13) + 5;
+        const tituloLineas = Math.ceil(tituloLimpio.length / 45);
+        yPos += (tituloLineas * 14) + 10;
         
+        // TERCERA FILA: Planta y Reportado por
         doc.font('Helvetica')
            .fillColor('#666666')
-           .text('Planta:', col1X, yPos);
+           .text('Planta:', 50, yPos);
         
         doc.font('Helvetica-Bold')
            .fillColor('#000000')
-           .text(` ${limpiarTexto(incidencia.plantaNombre)}`, col1X + 100, yPos);
-        
-        yPos += 18;
-        
-        // Columna 2
-        let yPosCol2 = 100 + 25; // Reiniciar para columna 2
+           .text(` ${limpiarTexto(incidencia.plantaNombre)}`, 150, yPos);
         
         doc.font('Helvetica')
            .fillColor('#666666')
-           .text('Estado:', col2X, yPosCol2);
-        
-        doc.font('Helvetica-Bold')
-           .fillColor(incidencia.estado === 'resuelto' ? '#4CAF50' : '#FF9800')
-           .text(` ${incidencia.estado.toUpperCase()}`, col2X + 60, yPosCol2);
-        
-        yPosCol2 += 18;
-        
-        doc.fillColor('#666666')
-           .font('Helvetica')
-           .text('Fecha de reporte:', col2X, yPosCol2);
+           .text('Reportado por:', 350, yPos);
         
         doc.font('Helvetica-Bold')
            .fillColor('#000000')
-           .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, col2X + 100, yPosCol2);
+           .text(` ${limpiarTexto(incidencia.usuarioNombre)}`, 450, yPos);
+        
+        yPos += 22;
+        
+        // CUARTA FILA: Fechas
+        doc.font('Helvetica')
+           .fillColor('#666666')
+           .text('Fecha de reporte:', 50, yPos);
+        
+        doc.font('Helvetica-Bold')
+           .fillColor('#000000')
+           .text(` ${new Date(incidencia.fechaReporte).toLocaleDateString('es-ES')}`, 150, yPos);
         
         if (incidencia.estado === 'resuelto' && incidencia.fechaResolucion) {
-            yPosCol2 += 18;
             doc.font('Helvetica')
                .fillColor('#666666')
-               .text('Fecha de resolución:', col2X, yPosCol2);
+               .text('Fecha de resolución:', 350, yPos);
             doc.font('Helvetica-Bold')
                .fillColor('#000000')
-               .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, col2X + 120, yPosCol2);
+               .text(` ${new Date(incidencia.fechaResolucion).toLocaleDateString('es-ES')}`, 480, yPos);
         }
         
-        yPosCol2 += 18;
-        doc.font('Helvetica')
-           .fillColor('#666666')
-           .text('Reportado por:', col2X, yPosCol2);
+        yPos += 35;
         
-        doc.font('Helvetica-Bold')
-           .fillColor('#000000')
-           .text(` ${limpiarTexto(incidencia.usuarioNombre)}`, col2X + 90, yPosCol2);
-        
-        // Usar la posición más baja de las dos columnas
-        yPos = Math.max(yPos, yPosCol2) + 30;
-        
-        // DESCRIPCIÓN DEL PROBLEMA - SEPARADA CLARAMENTE
+        // DESCRIPCIÓN DEL PROBLEMA - CON ESPACIO SUFICIENTE
         doc.font('Helvetica-Bold')
            .fontSize(12)
            .fillColor('#2c5aa0')
@@ -854,12 +798,11 @@ export const generarReportePDF = async (req, res) => {
            .fillColor('#333333')
            .text(descripcionLimpia, 50, yPos, { 
                width: 500, 
-               align: 'left',
-               lineGap: 5
+               lineGap: 6
            });
         
-        const descLineas = Math.ceil(descripcionLimpia.length / 80);
-        yPos += (descLineas * 12) + 30;
+        const descLineas = Math.ceil(descripcionLimpia.length / 70);
+        yPos += (descLineas * 13) + 30;
         
         // RESUMEN DEL TRABAJO REALIZADO
         if (incidencia.resumenTrabajo) {
@@ -876,42 +819,45 @@ export const generarReportePDF = async (req, res) => {
                .fillColor('#333333')
                .text(resumenLimpio, 50, yPos, { 
                    width: 500, 
-                   align: 'left',
-                   lineGap: 5
+                   lineGap: 6
                });
             
-            const resumenLineas = Math.ceil(resumenLimpio.length / 80);
-            yPos += (resumenLineas * 12) + 30;
+            const resumenLineas = Math.ceil(resumenLimpio.length / 70);
+            yPos += (resumenLineas * 13) + 40;
         }
         
         // =========== FOTOS ===========
         const fotosAntes = incidencia.fotos?.filter(foto => foto.tipo === 'antes') || [];
         const fotosDespues = incidencia.fotos?.filter(foto => foto.tipo === 'despues') || [];
         
-        if (fotosAntes.length > 0) {
-            // Verificar si necesitamos nueva página
-            if (yPos > 650) {
+        // FUNCIÓN PARA AGREGAR FOTOS (evita duplicación)
+        const agregarFotos = (titulo, fotos) => {
+            if (fotos.length === 0) return yPos;
+            
+            // Verificar si necesitamos nueva página ANTES de empezar fotos
+            if (yPos > 600) {
                 doc.addPage();
                 yPos = 50;
             } else {
-                yPos += 20;
+                yPos += 10;
             }
             
             doc.fontSize(14)
                .font('Helvetica-Bold')
                .fillColor('#2c5aa0')
-               .text('FOTOS ANTES DEL TRABAJO', 50, yPos);
+               .text(titulo, 50, yPos);
             
             yPos += 25;
             
-            fotosAntes.forEach((foto, index) => {
-                if (yPos > 700) {
+            fotos.forEach((foto, index) => {
+                // Verificar espacio ANTES de agregar cada foto
+                if (yPos > 650) {
                     doc.addPage();
                     yPos = 50;
                     doc.fontSize(14)
                        .font('Helvetica-Bold')
                        .fillColor('#2c5aa0')
-                       .text('FOTOS ANTES DEL TRABAJO (continuación)', 50, yPos);
+                       .text(`${titulo} (continuación)`, 50, yPos);
                     yPos += 25;
                 }
                 
@@ -923,18 +869,17 @@ export const generarReportePDF = async (req, res) => {
                 
                 yPos += 15;
                 
-                // Procesar imagen
+                // Procesar imagen (solo una vez por foto)
                 try {
                     if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
                         doc.image(foto.datos_imagen, 50, yPos, { 
                             width: 300,
                             height: 200,
-                            fit: [300, 200],
-                            align: 'left'
+                            fit: [300, 200]
                         });
                         yPos += 210;
                     } else {
-                        // Placeholder
+                        // Placeholder si no hay imagen
                         doc.rect(50, yPos, 300, 200)
                            .fill('#f5f5f5')
                            .stroke('#cccccc');
@@ -951,81 +896,30 @@ export const generarReportePDF = async (req, res) => {
                     yPos += 210;
                 }
                 
-                yPos += 20;
+                yPos += 25;
             });
+            
+            return yPos;
+        };
+        
+        // Agregar fotos "antes" si existen
+        if (fotosAntes.length > 0) {
+            yPos = agregarFotos('FOTOS ANTES DEL TRABAJO', fotosAntes);
         }
         
+        // Agregar fotos "después" si existen
         if (fotosDespues.length > 0) {
-            // Verificar si necesitamos nueva página
-            if (yPos > 500) {
-                doc.addPage();
-                yPos = 50;
-            } else {
-                yPos += 30;
-            }
-            
-            doc.fontSize(14)
-               .font('Helvetica-Bold')
-               .fillColor('#2c5aa0')
-               .text('FOTOS DESPUÉS DEL TRABAJO', 50, yPos);
-            
-            yPos += 25;
-            
-            fotosDespues.forEach((foto, index) => {
-                if (yPos > 700) {
-                    doc.addPage();
-                    yPos = 50;
-                    doc.fontSize(14)
-                       .font('Helvetica-Bold')
-                       .fillColor('#2c5aa0')
-                       .text('FOTOS DESPUÉS DEL TRABAJO (continuación)', 50, yPos);
-                    yPos += 25;
-                }
-                
-                doc.fontSize(10)
-                   .font('Helvetica-Bold')
-                   .fillColor('#000000')
-                   .text(`Foto ${index + 1}: ${limpiarTexto(foto.descripcion) || 'Sin descripción'}`, 50, yPos);
-                
-                yPos += 15;
-                
-                try {
-                    if (foto.datos_imagen && Buffer.isBuffer(foto.datos_imagen) && foto.datos_imagen.length > 100) {
-                        doc.image(foto.datos_imagen, 50, yPos, { 
-                            width: 300,
-                            height: 200,
-                            fit: [300, 200]
-                        });
-                        yPos += 210;
-                    } else {
-                        doc.rect(50, yPos, 300, 200)
-                           .fill('#f5f5f5')
-                           .stroke('#cccccc');
-                        
-                        doc.fontSize(10)
-                           .font('Helvetica')
-                           .fillColor('#666666')
-                           .text('Imagen no disponible', 150, yPos + 95);
-                        
-                        yPos += 210;
-                    }
-                } catch (imageError) {
-                    console.log('❌ Error al cargar imagen "después":', imageError);
-                    yPos += 210;
-                }
-                
-                yPos += 20;
-            });
+            yPos = agregarFotos('FOTOS DESPUÉS DEL TRABAJO', fotosDespues);
         }
         
         // =========== MATERIALES UTILIZADOS ===========
         if (incidencia.materiales && incidencia.materiales.length > 0) {
-            // Verificar si necesitamos nueva página
-            if (yPos > 500) {
+            // Verificar espacio ANTES de agregar materiales
+            if (yPos > 550) {
                 doc.addPage();
                 yPos = 50;
             } else {
-                yPos += 30;
+                yPos += 20;
             }
             
             doc.fontSize(14)
@@ -1035,7 +929,10 @@ export const generarReportePDF = async (req, res) => {
             
             yPos += 30;
             
-            // Encabezados de tabla
+            // Tabla de materiales
+            const startTableY = yPos;
+            
+            // Encabezados
             doc.rect(50, yPos, 500, 25)
                .fill('#f0f0f0')
                .stroke('#cccccc');
@@ -1051,40 +948,28 @@ export const generarReportePDF = async (req, res) => {
             yPos += 30;
             let totalCosto = 0;
             
-            // Filas de materiales
+            // Filas
             doc.font('Helvetica')
                .fontSize(9);
                
             incidencia.materiales.forEach((material, index) => {
-                // Alternar colores de fila
+                // Alternar colores
                 if (index % 2 === 0) {
                     doc.rect(50, yPos - 5, 500, 20)
                        .fill('#fafafa');
                 }
                 
-                // Limpiar campos (especialmente costos)
-                const materialNombre = limpiarTexto(
-                    material.materialNombre || 
-                    material.material_nombre || 
-                    material.nombre || 
-                    'Sin nombre'
-                );
-                
-                // Limpiar números - quitar caracteres extraños
-                const cantidadTexto = String(material.cantidad || '0').replace(/[^\d.,]/g, '');
-                const costoTexto = String(material.costo || '0').replace(/[^\d.,]/g, '');
-                
-                const cantidad = parseFloat(cantidadTexto.replace(',', '.')) || 0;
-                const costoUnitario = parseFloat(costoTexto.replace(',', '.')) || 0;
+                const materialNombre = limpiarTexto(material.nombre || material.materialNombre || 'Sin nombre');
+                const cantidad = parseFloat(material.cantidad) || 0;
+                const costoUnitario = parseFloat(material.costo) || 0;
                 const subtotal = cantidad * costoUnitario;
                 totalCosto += subtotal;
                 
-                // Mostrar campos limpios
                 doc.fillColor('#000000')
-                   .text(materialNombre.substring(0, 30), 55, yPos, { width: 180 })
+                   .text(materialNombre, 55, yPos, { width: 180 })
                    .text(`${cantidad} ${limpiarTexto(material.unidad) || 'unidad'}`, 250, yPos)
-                   .text(`$${costoUnitario.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, 350, yPos)
-                   .text(`$${subtotal.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, 450, yPos);
+                   .text(`$${costoUnitario.toLocaleString('es-CL')}`, 350, yPos)
+                   .text(`$${subtotal.toLocaleString('es-CL')}`, 450, yPos);
                 
                 yPos += 20;
             });
@@ -1098,13 +983,13 @@ export const generarReportePDF = async (req, res) => {
                .fontSize(11)
                .fillColor('#2c5aa0')
                .text('TOTAL:', 350, yPos)
-               .text(`$${totalCosto.toLocaleString('es-CL', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, 450, yPos);
+               .text(`$${totalCosto.toLocaleString('es-CL')}`, 450, yPos);
             
             yPos += 30;
         }
         
-        // =========== RESUMEN FINAL Y FIRMA ===========
-        // Verificar si necesitamos nueva página
+        // =========== RESUMEN FINAL ===========
+        // Verificar espacio ANTES del resumen final
         if (yPos > 600) {
             doc.addPage();
             yPos = 50;
@@ -1123,6 +1008,7 @@ export const generarReportePDF = async (req, res) => {
            .font('Helvetica')
            .fillColor('#000000');
         
+        // CON ESPACIOS CORRECTOS entre los puntos
         doc.text(`• Total de fotos (antes): ${fotosAntes.length}`, 50, yPos);
         yPos += 20;
         
@@ -1134,8 +1020,8 @@ export const generarReportePDF = async (req, res) => {
         
         if (incidencia.materiales && incidencia.materiales.length > 0) {
             const costoTotal = incidencia.materiales.reduce((total, material) => {
-                const cantidad = parseFloat(String(material.cantidad || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
-                const costo = parseFloat(String(material.costo || '0').replace(/[^\d.,]/g, '').replace(',', '.')) || 0;
+                const cantidad = parseFloat(material.cantidad) || 0;
+                const costo = parseFloat(material.costo) || 0;
                 return total + (cantidad * costo);
             }, 0);
             
@@ -1162,40 +1048,54 @@ export const generarReportePDF = async (req, res) => {
         doc.font('Helvetica')
            .fontSize(9)
            .fillColor('#666666')
-           .text(`Reporte generado el ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES')}`, 
+           .text(`Reporte generado el ${new Date().toLocaleDateString('es-ES')}`, 
                  50, yPos + 20);
 
-        // =========== FOOTER EN CADA PÁGINA ===========
+        // =========== FOOTER INTELIGENTE ===========
+        // SOLO agregar números de página si hay más de 1 página
         const pages = doc.bufferedPageRange();
-        for (let i = 0; i < pages.count; i++) {
-            doc.switchToPage(i);
-            
-            // Solo agregar número de página si hay más de 1 página
-            if (pages.count > 1) {
+        
+        // Verificar si realmente necesitamos páginas adicionales
+        // Si la última posición Y es menor a la altura máxima, estamos bien
+        if (yPos < doc.page.height - 100) {
+            // Tenemos espacio en la última página, no hay páginas vacías
+            // Agregar números de página en el footer de CADA página
+            for (let i = 0; i < pages.count; i++) {
+                doc.switchToPage(i);
+                
+                // Número de página abajo a la derecha
                 doc.fontSize(8)
                    .font('Helvetica')
                    .fillColor('#999999')
                    .text(
                        `Página ${i + 1} de ${pages.count}`,
-                       50, doc.page.height - 40,
-                       { width: doc.page.width - 100, align: 'center' }
+                       doc.page.width - 100,
+                       doc.page.height - 40
                    );
             }
-            
-            // Línea de separación del footer
-            doc.moveTo(50, doc.page.height - 50)
-               .lineTo(doc.page.width - 50, doc.page.height - 50)
-               .lineWidth(0.5)
-               .stroke('#cccccc');
+        } else {
+            // Ya estamos cerca del final, no hacer nada especial
+            // Los números de página se agregarán normalmente
+            for (let i = 0; i < pages.count; i++) {
+                doc.switchToPage(i);
+                
+                doc.fontSize(8)
+                   .font('Helvetica')
+                   .fillColor('#999999')
+                   .text(
+                       `Página ${i + 1} de ${pages.count}`,
+                       doc.page.width - 100,
+                       doc.page.height - 40
+                   );
+            }
         }
 
         // FINALIZAR DOCUMENTO
         doc.end();
-        console.log('✅ [PDF] PDF generado exitosamente');
+        console.log('✅ [PDF] PDF PERFECTO generado - Sin amontonamiento, sin páginas vacías');
 
     } catch (error) {
         console.log('❌ [PDF] ERROR:', error);
-        console.log('❌ [PDF] Stack:', error.stack);
         
         if (!res.headersSent) {
             res.status(500).json({
@@ -1214,16 +1114,14 @@ function calcularTiempoResolucion(incidencia) {
     const fin = new Date(incidencia.fechaResolucion);
     const diferencia = fin - inicio;
     
-    const horas = Math.floor(diferencia / (1000 * 60 * 60));
-    const minutos = Math.floor((diferencia % (1000 * 60 * 60)) / (1000 * 60));
+    const minutos = Math.floor(diferencia / (1000 * 60));
+    const segundos = Math.floor((diferencia % (1000 * 60)) / 1000);
     
-    if (horas === 0 && minutos === 0) {
-        return 'Menos de 1 minuto';
-    } else if (horas === 0) {
-        return `${minutos} minutos`;
-    } else if (horas === 1) {
-        return `${horas} hora y ${minutos} minutos`;
+    if (minutos === 0) {
+        return `${segundos} segundos`;
+    } else if (minutos === 1) {
+        return `${minutos} minuto`;
     } else {
-        return `${horas} horas y ${minutos} minutos`;
+        return `${minutos} minutos`;
     }
 }
