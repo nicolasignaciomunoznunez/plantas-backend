@@ -1,5 +1,5 @@
-// controllers/contactController.js
-import { BrevoService } from '../services/BrevoService.js';
+
+import { EmailService } from '../services/BrevoService.js';
 
 /**
  * Controlador para manejar el formulario de contacto
@@ -134,7 +134,7 @@ export class ContactController {
       
       // 7. Enviar email a la empresa usando BrevoService
       console.log('📤 [CONTACTO] Enviando email a la empresa...');
-      const emailResult = await BrevoService.sendContactFormEmail(contactData);
+      const emailResult = await EmailService.sendContactFormEmail(contactData);
       
       if (!emailResult.success) {
         console.error('❌ [CONTACTO] Error al enviar email a la empresa:', emailResult.error);
@@ -142,7 +142,7 @@ export class ContactController {
         // Intentar respaldo simple
         try {
           console.log('⚠️ [CONTACTO] Intentando envío de respaldo...');
-          const backupResult = await BrevoService.sendEmail(
+          const backupResult = await EmailService.sendEmail(
             process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com',
             `CONTACTO FALLBACK: ${contactData.name}`,
             `Nombre: ${contactData.name}\nEmail: ${contactData.email}\nTeléfono: ${contactData.phone}\nMensaje: ${contactData.comment}\n\n⚠️ Este es un mensaje de respaldo porque el formato HTML falló.`
@@ -169,7 +169,7 @@ export class ContactController {
       let confirmationSent = false;
       try {
         console.log('📧 [CONTACTO] Enviando confirmación al usuario...');
-        const confirmationResult = await BrevoService.sendContactConfirmationEmail(contactData);
+        const confirmationResult = await EmailService.sendContactConfirmationEmail(contactData);
         
         if (confirmationResult.success) {
           confirmationSent = true;
@@ -231,7 +231,7 @@ export class ContactController {
       console.log('🧪 [CONTACTO] Test endpoint llamado');
       
       // Probar conexión SMTP
-      const smtpTest = await BrevoService.testConnection();
+      const smtpTest = await EmailService.testConnection();
       
       // Crear datos de prueba
       const testData = {
@@ -290,7 +290,7 @@ export class ContactController {
         timestamp: new Date()
       };
       
-      const result = await BrevoService.sendContactFormEmail(testData);
+      const result = await EmailService.sendContactFormEmail(testData);
       
       if (result.success) {
         res.status(200).json({
@@ -335,7 +335,7 @@ export class ContactController {
     
     // Probar conexión SMTP
     try {
-      const smtpHealthy = await BrevoService.testConnection();
+      const smtpHealthy = await EmailService.testConnection();
       health.smtp = smtpHealthy ? 'connected' : 'disconnected';
     } catch (error) {
       health.smtp = 'error';
