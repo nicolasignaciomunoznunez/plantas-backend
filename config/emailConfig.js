@@ -1,71 +1,29 @@
-// config/emailConfig.js - VERSIÓN PARA BREVO
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
-dotenv.config();
+// config/emailConfig.js - ACTUALIZADO
+import EmailService from '../services/BrevoService.js'; // ✅ Importa el nuevo servicio
 
+// Mantén las funciones existentes para compatibilidad
 export const createTransporter = () => {
-  console.log('📧 [EMAIL] Configurando para:', process.env.EMAIL_SERVICE || 'brevo');
-  
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_APP_PASSWORD
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  // Esta función ya no es necesaria pero la mantenemos
+  console.log('📧 [EMAIL] Usando BrevoService');
+  return null; // O puedes mantener la implementación antigua
 };
 
 export const sendEmail = async (to, subject, text, html) => {
+  // Usa el nuevo EmailService
   try {
-    const transporter = createTransporter();
-    
-    const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'Infraexpert'}" <${process.env.EMAIL_FROM_ADDRESS}>`,
-      to: to,
-      subject: subject,
-      text: text,
-      html: html || text
-    };
-    
-    console.log(`📧 [BREVO] Enviando a: ${to}`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`✅ [BREVO] Email enviado: ${info.messageId}`);
-    return info;
-    
+    const result = await EmailService.sendEmail(to, subject, html || text, text);
+    return result;
   } catch (error) {
-    console.error(`❌ [BREVO] Error: ${error.message}`);
+    console.error(`❌ Error en sendEmail: ${error.message}`);
     throw error;
   }
 };
 
 export const verifyEmailConnection = async () => {
-  try {
-    console.log('📧 [BREVO] Verificando conexión...');
-    
-    if (!process.env.EMAIL_APP_PASSWORD) {
-      console.log('❌ [BREVO] Faltan credenciales');
-      return false;
-    }
-    
-    const transporter = createTransporter();
-    await transporter.verify();
-    
-    console.log('✅ [BREVO] Conectado correctamente');
-    console.log('   Servidor:', process.env.EMAIL_HOST);
-    console.log('   Usuario:', process.env.EMAIL_USER);
-    
-    return true;
-  } catch (error) {
-    console.error('❌ [BREVO] Error de conexión:', error.message);
-    return false;
-  }
+  // Usa el nuevo EmailService
+  return await EmailService.testConnection();
 };
 
 // Mantener compatibilidad
-export const EmailService = { sendEmail, verifyEmailConnection };
-export default { sendEmail, verifyEmailConnection };
+export { EmailService };
+export default { sendEmail, verifyEmailConnection, EmailService };

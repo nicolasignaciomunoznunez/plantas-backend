@@ -14,7 +14,7 @@ dotenv.config();
 
 // Importar después de dotenv.config()
 import { testConnection } from "./db/connectDB.js";
-import { verifyEmailConnection } from "./config/emailConfig.js";
+import EmailService from "./services/BrevoService.js";
 
 // Importar rutas
 import authRoutes from "./routes/authRoutes.js";

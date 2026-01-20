@@ -1,7 +1,7 @@
 // services/BrevoService.js - VERSIÓN COMPLETA CON CONTACTO
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
-import { EmailService } from '../config/emailConfig';
+
 dotenv.config();
 
 // Configurar transporte con BREVO
