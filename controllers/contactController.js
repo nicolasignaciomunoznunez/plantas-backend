@@ -1,4 +1,3 @@
-
 import { EmailService } from '../services/BrevoService.js';
 
 /**
@@ -76,16 +75,22 @@ export class ContactController {
         formattedPhone = `+${cleanedPhone}`;
       }
       
-      const phoneRegex = /^(\+56)?9[0-9]{8}$/;
-      const cleanForValidation = formattedPhone.replace('+', '');
+      const phoneRegex = /^9[0-9]{8}$/;
+      const cleanForValidation = formattedPhone.replace(/^\+56/, '').replace(/^56/, '');
       
       if (!phoneRegex.test(cleanForValidation)) {
-        console.log('❌ [CONTACTO] Teléfono inválido:', phone, '->', formattedPhone);
+        console.log('❌ [CONTACTO] Teléfono inválido:', phone, '->', formattedPhone, '->', cleanForValidation);
         return res.status(400).json({
           success: false,
           message: 'Por favor, ingresa un número de teléfono chileno válido. Ej: +56 9 1234 5678 o 9 1234 5678',
           field: 'phone',
-          example: '+56912345678'
+          example: '+56912345678',
+          debug: {
+            original: phone,
+            cleaned: cleanedPhone,
+            formatted: formattedPhone,
+            forValidation: cleanForValidation
+          }
         });
       }
       
