@@ -25,6 +25,9 @@ import mantenimientoRoutes from "./routes/mantenimientoRoutes.js";
 import reporteRoutes from "./routes/reporteRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
+// ✅ NUEVO: Importar rutas de contacto
+import contactRoutes from "./routes/contactRoutes.js";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -41,6 +44,7 @@ console.log(`   NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`   CLIENT_URL: ${process.env.CLIENT_URL}`);
 console.log(`   DB: ${process.env.MYSQLUSER}@${process.env.MYSQLHOST}`);
 console.log(`   DATABASE: ${process.env.MYSQLDATABASE}`);
+console.log(`   CONTACT_EMAIL: ${process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com'}`);
 console.log('🚀 ==========================================');
 
 // ==================== CONFIGURACIÓN CORS CORREGIDA ====================
@@ -60,7 +64,11 @@ const allowedOrigins = [
   
   // Subdominio API (si necesitas acceso directo)
   'https://api.infraexpert.cl',
-  'http://api.infraexpert.cl'
+  'http://api.infraexpert.cl',
+  
+  // ✅ NUEVO: Agregar dominio del frontend de contacto
+  'https://infraexpert.vercel.app',
+  'http://infraexpert.vercel.app'
 ];
 
 console.log('🔒 Dominios permitidos por CORS:', allowedOrigins);
@@ -150,6 +158,19 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
 
 // ==================== RATE LIMITING ====================
+// Rate limit más específico para contacto (para prevenir spam)
+const contactLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // Máximo 5 solicitudes por ventana
+  message: { 
+    success: false, 
+    message: 'Demasiadas solicitudes de contacto. Por favor, espera 15 minutos antes de intentar nuevamente.' 
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false
+});
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
   max: process.env.NODE_ENV === 'production' ? 100 : 1000, // Límites diferentes
@@ -161,13 +182,13 @@ const apiLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Aplicar rate limiting solo a rutas API
+// Aplicar rate limiting
 app.use('/api/', apiLimiter);
 
 // ==================== TRUST PROXY (IMPORTANTE PARA NGINX) ====================
 app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal', '172.26.10.94']);
 
-// ==================== LOGGING ====================
+// ==================== LOGGING MEJORADO ====================
 app.use((req, res, next) => {
   console.log(`📨 ${req.method} ${req.path} - IP: ${req.ip} - Origin: ${req.headers.origin}`);
   next();
@@ -207,12 +228,26 @@ app.use("/api/mantenimientos", mantenimientoRoutes);
 app.use("/api/reportes", reporteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 
+// ✅ NUEVO: Rutas de contacto
+app.use("/api/contact", contactLimiter, contactRoutes);
+
 // ==================== RUTAS DE DIAGNÓSTICO ====================
 
 // Health check mejorado
 app.get("/api/health", async (req, res) => {
   try {
     const dbStatus = await testConnection();
+    
+    // Importar y probar BrevoService dinámicamente para evitar errores de importación
+    let emailStatus = "unknown";
+    try {
+      const { BrevoService } = await import("./services/BrevoService.js");
+      emailStatus = await BrevoService.testConnection() ? "connected" : "disconnected";
+    } catch (emailError) {
+      console.log("⚠️ No se pudo verificar email service:", emailError.message);
+      emailStatus = "service_unavailable";
+    }
+    
     res.json({
       success: true,
       message: "✅ API funcionando correctamente",
@@ -229,7 +264,11 @@ app.get("/api/health", async (req, res) => {
         status: dbStatus ? "connected" : "disconnected"
       },
       services: {
-        email: !!process.env.EMAIL_APP_PASSWORD,
+        email: {
+          configured: !!(process.env.EMAIL_APP_PASSWORD && process.env.EMAIL_FROM_ADDRESS),
+          status: emailStatus,
+          contact_email: process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com'
+        },
         uploads: true,
         cors: allowedOrigins
       }
@@ -265,10 +304,45 @@ app.get("/api/config", (req, res) => {
       email: {
         service: process.env.EMAIL_SERVICE,
         from: process.env.EMAIL_FROM_ADDRESS,
+        contact: process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com',
         configured: !!(process.env.EMAIL_APP_PASSWORD && process.env.EMAIL_FROM_ADDRESS)
+      }
+    },
+    endpoints: {
+      contact: {
+        send: "/api/contact/send",
+        test: "/api/contact/test",
+        health: "/api/contact/health"
       }
     }
   });
+});
+
+// ✅ NUEVO: Endpoint específico para probar email
+app.get("/api/email-status", async (req, res) => {
+  try {
+    const { BrevoService } = await import("./services/BrevoService.js");
+    const smtpTest = await BrevoService.testConnection();
+    
+    res.json({
+      success: true,
+      service: "Brevo SMTP",
+      status: smtpTest ? "connected" : "disconnected",
+      configured: {
+        host: process.env.EMAIL_HOST || 'smtp-relay.brevo.com',
+        port: process.env.EMAIL_PORT || 587,
+        from: process.env.EMAIL_FROM_ADDRESS,
+        contact: process.env.CONTACT_EMAIL
+      },
+      test_endpoint: "POST /api/contact/send"
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error verificando email service",
+      error: error.message
+    });
+  }
 });
 
 // ==================== RUTA PRINCIPAL ====================
@@ -281,18 +355,24 @@ app.get("/", (req, res) => {
     documentation: {
       health: "/api/health",
       config: "/api/config",
-      emailConfig: "/api/email-config",
+      emailStatus: "/api/email-status",
       endpoints: {
         auth: "/api/auth",
         plantas: "/api/plantas",
         incidencias: "/api/incidencias",
         mantenimientos: "/api/mantenimientos",
         reportes: "/api/reportes",
-        dashboard: "/api/dashboard"
+        dashboard: "/api/dashboard",
+        // ✅ NUEVO: Contacto
+        contact: {
+          send: "/api/contact/send (POST)",
+          test: "/api/contact/test (GET)",
+          health: "/api/contact/health (GET)"
+        }
       }
     },
     support: {
-      email: process.env.EMAIL_FROM_ADDRESS,
+      email: process.env.EMAIL_FROM_ADDRESS || process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com',
       status: "operational"
     }
   });
@@ -308,8 +388,12 @@ app.use('*', (req, res) => {
     availableEndpoints: [
       "/api/health",
       "/api/config",
+      "/api/email-status",
       "/api/auth",
-      "/api/plantas"
+      "/api/plantas",
+      // ✅ NUEVO
+      "/api/contact/send (POST)",
+      "/api/contact/test (GET)"
     ]
   });
 });
@@ -326,6 +410,14 @@ app.use((err, req, res, next) => {
       message: "Acceso no permitido desde este origen",
       allowedOrigins: allowedOrigins,
       yourOrigin: req.headers.origin
+    });
+  }
+  
+  // Si es error de rate limit
+  if (err.message && err.message.includes('Too many requests')) {
+    return res.status(429).json({
+      success: false,
+      message: err.message
     });
   }
   
@@ -355,7 +447,21 @@ app.listen(PORT, '0.0.0.0', async () => {
     console.error("❌ Error conectando a DB:", error.message);
   }
   
+  // ✅ NUEVO: Verificar servicio de email
+  try {
+    const { BrevoService } = await import("./services/BrevoService.js");
+    const emailTest = await BrevoService.testConnection();
+    console.log("📧 Servicio de email:", emailTest ? "✅ CONECTADO" : "❌ ERROR");
+    
+    if (emailTest) {
+      console.log(`   📩 Contacto: ${process.env.CONTACT_EMAIL || 'contactoinfraexpert@gmail.com'}`);
+    }
+  } catch (error) {
+    console.error("❌ Error verificando email service:", error.message);
+  }
+  
   console.log("📁 Archivos estáticos: ✅ CONFIGURADOS");
   console.log("🔒 CORS configurado para:", allowedOrigins);
+  console.log("📞 Contacto: POST /api/contact/send");
   console.log("==========================================");
 });
