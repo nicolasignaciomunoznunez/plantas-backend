@@ -1,6 +1,7 @@
 // services/BrevoService.js - VERSIÓN COMPLETA CON CONTACTO
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import { EmailService } from '../config/emailConfig';
 dotenv.config();
 
 // Configurar transporte con BREVO
@@ -281,7 +282,7 @@ const EMAIL_TEMPLATES = {
   `
 };
 
-export class BrevoService {
+export class EmailService {
   static async sendEmail(to, subject, html, text = '') {
     try {
       console.log('📧 [BREVO] Enviando email a:', to);
@@ -502,4 +503,4 @@ El equipo de InfraExpert
   }
 }
 
-export default BrevoService;
+export default EmailService;

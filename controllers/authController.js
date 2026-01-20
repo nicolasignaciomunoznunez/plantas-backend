@@ -49,7 +49,7 @@ export const registrar = async (req, res) => {
     const token = generarTokenYEstablecerCookie(res, nuevoUsuario.id);
 
     // Enviar email de verificación
-    const emailResult = await SendGridService.sendVerificationEmail(
+    const emailResult = await EmailService.sendVerificationEmail(
       nuevoUsuario.email, 
       tokenVerificacion, 
       nuevoUsuario.nombre
@@ -108,7 +108,7 @@ export const verificarEmail = async (req, res) => {
     const usuarioActualizado = await Usuario.verificarUsuario(usuario.id);
 
     // Enviar email de bienvenida
-    await SendGridService.sendWelcomeEmail(usuarioActualizado.email, usuarioActualizado.nombre);
+    await EmailService.sendWelcomeEmail(usuarioActualizado.email, usuarioActualizado.nombre);
 
     res.status(200).json({
       success: true,
@@ -227,7 +227,7 @@ export const olvideContraseña = async (req, res) => {
     await Usuario.establecerTokenRestablecimiento(usuario.id, tokenRestablecimiento, tokenRestablecimientoExpira);
 
     // Enviar email de restablecimiento
-    await SendGridService.sendPasswordResetEmail(usuario.email, tokenRestablecimiento, usuario.nombre);
+    await EmailService.sendPasswordResetEmail(usuario.email, tokenRestablecimiento, usuario.nombre);
 
     res.status(200).json({ 
       success: true, 
@@ -267,7 +267,7 @@ export const restablecerContraseña = async (req, res) => {
     await Usuario.actualizarContraseña(usuario.id, contraseñaHasheada);
 
     // Enviar confirmación
-    await SendGridService.sendPasswordResetConfirmation(usuario.email, usuario.nombre);
+    await EmailService.sendPasswordResetConfirmation(usuario.email, usuario.nombre);
 
     res.status(200).json({ 
       success: true, 
