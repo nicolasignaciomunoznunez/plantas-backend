@@ -30,7 +30,7 @@ export const testConnection = async () => {
         const [tables] = await connection.execute(`
             SELECT TABLE_NAME 
             FROM information_schema.tables 
-            WHERE TABLE_SCHEMA = 'infraexpert_db'
+            WHERE TABLE_SCHEMA = '${dbConfig.database}'
         `);
         
         console.log('📊 Tablas migradas:', tables.length);
